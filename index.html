@@ -30,6 +30,12 @@
       <div class="bio-top-bar">
         <span class="bio-badge">✨ Cẩm Nang Ẩm Thực Hà Nội</span>
         <div class="header-actions">
+          <button id="btnOpenManager" class="btn-manage-hub" title="Quản lý & Chỉnh sửa danh sách quán" aria-label="Quản lý quán">
+            ⚙️ Quản lý quán
+          </button>
+          <button id="btnExportSheets" class="btn-export-csv" title="Xuất dữ liệu ra Google Sheets / Excel (.csv)" aria-label="Xuất Google Sheets">
+            📊 Google Sheets
+          </button>
           <button id="themeToggleBtn" class="icon-btn" title="Đổi giao diện Tối/Sáng" aria-label="Đổi giao diện">🌙</button>
           <button id="btnExportData" class="icon-btn" title="Sao lưu / Xuất dữ liệu JSON" aria-label="Xuất dữ liệu">💾</button>
           <button id="shareGuideBtn" class="icon-btn" title="Chia sẻ trang này" aria-label="Chia sẻ">🔗</button>
@@ -45,7 +51,7 @@
           <h1 id="profileName" class="bio-name">Hanoi Food & Cafe Guide</h1>
           <span id="profileHandle" class="bio-handle">@foodie_hanoi</span>
           <p id="profileBio" class="bio-desc">
-            Cẩm nang quán ăn & cà phê chọn lọc tại Hà Nội. Review chân thực, gắn link Google Maps trực tiếp và gợi ý món ngon nhất định phải thử! 🥢✨
+            Cẩm nang quán ăn & cà phê chọn lọc tại Hà Nội. Đạt chuẩn đánh giá >= 4.0★ và hơn 100+ lượt reviews Google Maps! 🥢☕✨
           </p>
         </div>
       </div>
@@ -71,9 +77,11 @@
         </button>
       </div>
 
-      <button id="btnAddPlace" class="btn-add-place">
-        <span>+</span> Thêm quán mới
-      </button>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button id="btnAddPlace" class="btn-add-place">
+          <span>+</span> Thêm quán mới
+        </button>
+      </div>
     </div>
 
     <!-- CATEGORY PILLS (Lọc nhanh danh mục) -->
@@ -292,6 +300,151 @@
         <p style="font-size: 0.8rem; color: var(--text-light);">
           Tip: Bạn có thể cài đặt hoặc thêm trang web này vào Màn hình chính (Add to Home Screen) trên iPhone/Android để mở xem bất cứ lúc nào!
         </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================
+       MODAL: BẢNG QUẢN TRỊ & ĐIỀU CHỈNH THÔNG TIN QUÁN (Place Manager)
+       =================================================================== -->
+  <div id="placeManagerModal" class="modal-overlay" role="dialog" aria-modal="true">
+    <div class="modal-card manager-modal-card">
+      <button class="modal-close-btn" title="Đóng">✕</button>
+      <div class="modal-body">
+        <h2 class="modal-title" style="margin-bottom: 6px;">⚙️ Quản Lý & Điều Chỉnh Danh Sách Quán</h2>
+        <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 16px;">
+          Chỉnh sửa thông tin, xóa quán, hoặc xuất dữ liệu tương thích 100% với Google Sheets / Excel.
+        </p>
+
+        <div class="manager-toolbar">
+          <div style="display: flex; gap: 8px; flex: 1; max-width: 420px;">
+            <input type="text" id="managerSearchInput" class="search-input" style="padding: 8px 14px;" placeholder="Tìm nhanh quán để sửa/xóa...">
+            <select id="managerDistrictFilter" class="select-filter">
+              <!-- Render tự động -->
+            </select>
+          </div>
+
+          <div class="manager-actions">
+            <button id="btnManagerExportCsv" class="btn-export-csv" title="Tải file CSV cho Google Sheets">
+              📊 Xuất Google Sheets (.csv)
+            </button>
+            <button id="btnManagerAddNew" class="btn-add-place" style="padding: 8px 14px; font-size: 0.84rem;">
+              + Thêm mới
+            </button>
+          </div>
+        </div>
+
+        <div class="manager-table-wrapper">
+          <table class="manager-table">
+            <thead>
+              <tr>
+                <th style="width: 50px;">Ảnh</th>
+                <th>Tên Quán & Địa Chỉ</th>
+                <th>Danh Mục</th>
+                <th>Đánh Giá</th>
+                <th style="width: 140px; text-align: center;">Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="managerTableBody">
+              <!-- Render danh sách quán quản lý từ app.js -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================
+       MODAL: CHỈNH SỬA QUÁN ĂN (Edit Place Modal)
+       =================================================================== -->
+  <div id="editPlaceModal" class="modal-overlay" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <button class="modal-close-btn" title="Đóng">✕</button>
+      <div class="modal-body">
+        <h2 class="modal-title" style="margin-bottom: 14px;">✏️ Chỉnh Sửa Thông Tin Quán</h2>
+
+        <form id="editPlaceForm">
+          <input type="hidden" id="editPlaceId">
+
+          <div class="form-group">
+            <label class="form-label" for="editPlaceName">Tên quán ăn / cafe *</label>
+            <input type="text" id="editPlaceName" class="form-input" required>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="editPlaceCategory">Danh mục món</label>
+              <select id="editPlaceCategory" class="form-select"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="editPlaceDistrict">Quận / Khu vực</label>
+              <select id="editPlaceDistrict" class="form-select"></select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="editPlaceAddress">Địa chỉ chi tiết *</label>
+            <input type="text" id="editPlaceAddress" class="form-input" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="editPlaceMapsUrl">Link Google Maps</label>
+            <input type="url" id="editPlaceMapsUrl" class="form-input">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="editPlaceRating">Điểm đánh giá (1.0 - 5.0)</label>
+              <input type="number" id="editPlaceRating" class="form-input" min="1.0" max="5.0" step="0.1">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="editPlaceReviewCount">Số lượt đánh giá Google Maps</label>
+              <input type="number" id="editPlaceReviewCount" class="form-input" min="0" step="1">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="editPlacePrice">Khoảng giá hiển thị</label>
+              <input type="text" id="editPlacePrice" class="form-input">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="editPlacePriceLevel">Mức giá</label>
+              <select id="editPlacePriceLevel" class="form-select">
+                <option value="low">Bình dân (&lt; 50k)</option>
+                <option value="mid">Trung bình (50k - 150k)</option>
+                <option value="high">Cao cấp (&gt; 150k)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="editPlaceTime">Giờ mở cửa</label>
+            <input type="text" id="editPlaceTime" class="form-input">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="editPlaceMustTry">Món ngon Must-Try</label>
+            <input type="text" id="editPlaceMustTry" class="form-input">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="editPlaceReview">Đánh giá & Review của bạn</label>
+            <textarea id="editPlaceReview" class="form-textarea" rows="3"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="editPlaceTags">Tags (cách nhau bởi dấu phẩy)</label>
+            <input type="text" id="editPlaceTags" class="form-input">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="editPlaceImage">Link hình ảnh món ăn</label>
+            <input type="url" id="editPlaceImage" class="form-input">
+          </div>
+
+          <button type="submit" class="btn-submit">💾 Lưu Thay Đổi</button>
+        </form>
       </div>
     </div>
   </div>

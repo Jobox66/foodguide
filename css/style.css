@@ -1258,6 +1258,160 @@ body {
 }
 
 /* ===================================================================
+   PLACE MANAGER & ADMIN STYLES
+   =================================================================== */
+.btn-manage-hub {
+  background: var(--bg-card);
+  border: 2px solid var(--border-bold);
+  color: var(--text-main);
+  padding: 8px 16px;
+  border-radius: var(--border-radius-pill);
+  font-family: var(--font-main);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 2px 2px 0px var(--border-bold);
+  transition: var(--transition);
+}
+
+.btn-manage-hub:hover {
+  background: var(--accent-yellow);
+  color: #1A2433;
+  transform: translateY(-2px);
+}
+
+.manager-modal-card {
+  max-width: 920px !important;
+}
+
+.manager-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 2px dashed var(--border-color);
+}
+
+.manager-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn-export-csv {
+  background: #10B981;
+  color: white;
+  border: 2px solid #059669;
+  font-family: var(--font-main);
+  font-weight: 800;
+  font-size: 0.84rem;
+  padding: 8px 14px;
+  border-radius: var(--border-radius-pill);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 2px 2px 0px #059669;
+  transition: var(--transition);
+}
+
+.btn-export-csv:hover {
+  background: #059669;
+  transform: translateY(-2px);
+}
+
+.manager-table-wrapper {
+  max-height: 60vh;
+  overflow-y: auto;
+  border: 2px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+}
+
+.manager-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  text-align: left;
+}
+
+.manager-table th {
+  background: var(--bg-page);
+  padding: 12px 14px;
+  font-weight: 800;
+  color: var(--text-main);
+  border-bottom: 2px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.manager-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: middle;
+}
+
+.manager-table tr:hover {
+  background: var(--primary-light);
+}
+
+.manager-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid var(--border-color);
+}
+
+.btn-row-action {
+  padding: 6px 10px;
+  border-radius: var(--border-radius-sm);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: var(--transition);
+}
+
+.btn-row-edit {
+  background: var(--primary-light);
+  color: var(--primary);
+  border: 1.5px solid var(--primary);
+}
+
+.btn-row-edit:hover {
+  background: var(--primary);
+  color: white;
+}
+
+.btn-row-delete {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1.5px solid #dc2626;
+}
+
+.btn-row-delete:hover {
+  background: #dc2626;
+  color: white;
+}
+
+.reviews-count-tag {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-left: 2px;
+}
+
+/* ===================================================================
    RESPONSIVE DESIGN (Mobile First Optimizations)
    =================================================================== */
 @media (max-width: 680px) {
@@ -1311,4 +1465,10 @@ body {
   .form-row {
     grid-template-columns: 1fr;
   }
+
+  .manager-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
+

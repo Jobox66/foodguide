@@ -97,10 +97,24 @@ function cacheDOMElements() {
   elements.shareGuideBtn = document.getElementById("shareGuideBtn");
   elements.btnAddPlace = document.getElementById("btnAddPlace");
   elements.btnExportData = document.getElementById("btnExportData");
+  elements.btnOpenManager = document.getElementById("btnOpenManager");
+  elements.btnExportSheets = document.getElementById("btnExportSheets");
 
   // Magic Auto-fill
   elements.quickMapsUrlInput = document.getElementById("quickMapsUrlInput");
   elements.btnQuickAutoFill = document.getElementById("btnQuickAutoFill");
+
+  // Place Manager Modal
+  elements.placeManagerModal = document.getElementById("placeManagerModal");
+  elements.managerTableBody = document.getElementById("managerTableBody");
+  elements.managerSearchInput = document.getElementById("managerSearchInput");
+  elements.managerDistrictFilter = document.getElementById("managerDistrictFilter");
+  elements.btnManagerExportCsv = document.getElementById("btnManagerExportCsv");
+  elements.btnManagerAddNew = document.getElementById("btnManagerAddNew");
+
+  // Edit Place Modal
+  elements.editPlaceModal = document.getElementById("editPlaceModal");
+  elements.editPlaceForm = document.getElementById("editPlaceForm");
 
   // Modals
   elements.placeDetailModal = document.getElementById("placeDetailModal");
@@ -226,6 +240,38 @@ function setupEventListeners() {
 
   if (elements.shareGuideBtn) {
     elements.shareGuideBtn.addEventListener("click", openShareModal);
+  }
+
+  // Quản lý quán (Place Manager)
+  if (elements.btnOpenManager) {
+    elements.btnOpenManager.addEventListener("click", openPlaceManagerModal);
+  }
+
+  // Xuất file Google Sheets (.csv)
+  if (elements.btnExportSheets) {
+    elements.btnExportSheets.addEventListener("click", exportGoogleSheetsCSV);
+  }
+  if (elements.btnManagerExportCsv) {
+    elements.btnManagerExportCsv.addEventListener("click", exportGoogleSheetsCSV);
+  }
+  if (elements.btnManagerAddNew) {
+    elements.btnManagerAddNew.addEventListener("click", () => {
+      closeAllModals();
+      openAddPlaceModal();
+    });
+  }
+
+  // Filter & Search trong bảng quản lý
+  if (elements.managerSearchInput) {
+    elements.managerSearchInput.addEventListener("input", renderManagerTable);
+  }
+  if (elements.managerDistrictFilter) {
+    elements.managerDistrictFilter.addEventListener("change", renderManagerTable);
+  }
+
+  // Form chỉnh sửa quán
+  if (elements.editPlaceForm) {
+    elements.editPlaceForm.addEventListener("submit", handleEditPlaceSubmit);
   }
 
   // Magic Auto-fill từ Google Maps Link
@@ -570,7 +616,9 @@ function renderPlaces() {
                loading="lazy" 
                onerror="this.src='https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=600&q=80'">
           <div class="place-district-badge">📍 ${place.district || 'Hà Nội'}</div>
-          <div class="place-badge-rating">★ ${place.rating.toFixed(1)}</div>
+          <div class="place-badge-rating">
+            ★ ${place.rating.toFixed(1)} ${place.reviewCount ? `<span style="font-size: 0.72rem; opacity: 0.85; margin-left: 2px;">(${place.reviewCount >= 1000 ? (place.reviewCount/1000).toFixed(1)+'k' : place.reviewCount})</span>` : ''}
+          </div>
         </div>
 
         <div class="place-card-body">
@@ -633,7 +681,9 @@ function openPlaceDetailModal(placeId) {
     <div class="modal-body">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px;">
         <span class="place-category-tag">${categoryObj.icon || '🍽️'} ${categoryObj.name || place.category}</span>
-        <span class="place-badge-rating" style="position: static; font-size: 0.95rem;">★ ${place.rating.toFixed(1)} / 5.0</span>
+        <span class="place-badge-rating" style="position: static; font-size: 0.95rem;">
+          ★ ${place.rating.toFixed(1)} / 5.0 ${place.reviewCount ? `(${place.reviewCount.toLocaleString('vi-VN')} đánh giá)` : ''}
+        </span>
       </div>
 
       <h2 class="modal-title">${place.name}</h2>
@@ -996,6 +1046,266 @@ function exportDataJSON() {
 }
 
 /**
+ * 📊 Xuất dữ liệu ra file Google Sheets / Excel (.csv) chuẩn UTF-8 BOM
+ */
+function exportGoogleSheetsCSV() {
+  const headers = [
+    "Tên Quán",
+    "Danh Mục",
+    "Quận",
+    "Địa Chỉ",
+    "Số Sao",
+    "Lượt Đánh Giá",
+    "Khoảng Giá",
+    "Giờ Mở Cửa",
+    "Món Must-Try",
+    "Đánh Giá / Review",
+    "Link Google Maps",
+    "Tags"
+  ];
+  
+  let csvContent = "\uFEFF"; // UTF-8 BOM cho Google Sheets & Excel không lỗi tiếng Việt
+  csvContent += headers.map(h => `"${h}"`).join(",") + "\r\n";
+  
+  state.places.forEach(p => {
+    const cat = state.categories.find(c => c.id === p.category);
+    const catName = cat ? cat.name : p.category;
+    const row = [
+      p.name || "",
+      catName || "",
+      p.district || "",
+      p.address || "",
+      p.rating || 0,
+      p.reviewCount || 0,
+      p.priceRange || "",
+      p.time || "",
+      p.mustTry || "",
+      (p.review || "").replace(/"/g, '""'),
+      p.mapsUrl || "",
+      (p.tags || []).join(";")
+    ];
+    csvContent += row.map(val => `"${val}"`).join(",") + "\r\n";
+  });
+
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const downloadAnchor = document.createElement("a");
+  downloadAnchor.setAttribute("href", url);
+  downloadAnchor.setAttribute("download", `hanoi_foodguide_google_sheets_${Date.now()}.csv`);
+  document.body.appendChild(downloadAnchor);
+  downloadAnchor.click();
+  downloadAnchor.remove();
+  URL.revokeObjectURL(url);
+
+  showToast("📊 Đã xuất file Google Sheets (.csv) thành công!");
+}
+
+/**
+ * Mở Modal Quản Lý Danh Sách Quán (Place Manager)
+ */
+function openPlaceManagerModal() {
+  if (!elements.placeManagerModal) return;
+
+  if (elements.managerDistrictFilter) {
+    let distHtml = "";
+    DISTRICTS.forEach(d => {
+      distHtml += `<option value="${d}">${d}</option>`;
+    });
+    elements.managerDistrictFilter.innerHTML = distHtml;
+    elements.managerDistrictFilter.value = "Tất cả quận";
+  }
+
+  if (elements.managerSearchInput) {
+    elements.managerSearchInput.value = "";
+  }
+
+  renderManagerTable();
+  elements.placeManagerModal.classList.add("active");
+}
+
+/**
+ * Render Bảng Quản Lý Quán (Manager Table)
+ */
+function renderManagerTable() {
+  if (!elements.managerTableBody) return;
+  const q = (elements.managerSearchInput ? elements.managerSearchInput.value : "").trim().toLowerCase();
+  const dFilter = (elements.managerDistrictFilter ? elements.managerDistrictFilter.value : "Tất cả quận");
+
+  const filtered = state.places.filter(p => {
+    if (dFilter !== "Tất cả quận" && p.district !== dFilter) return false;
+    if (q) {
+      const matchName = (p.name || "").toLowerCase().includes(q);
+      const matchAddress = (p.address || "").toLowerCase().includes(q);
+      if (!matchName && !matchAddress) return false;
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    elements.managerTableBody.innerHTML = `
+      <tr>
+        <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">
+          Không tìm thấy quán nào phù hợp.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  let html = "";
+  filtered.forEach(p => {
+    const cat = state.categories.find(c => c.id === p.category);
+    const catName = cat ? `${cat.icon} ${cat.name.split('(')[0]}` : p.category;
+    const reviewFormatted = p.reviewCount ? (p.reviewCount >= 1000 ? `${(p.reviewCount/1000).toFixed(1)}k+` : `${p.reviewCount}+`) : "Mới";
+
+    html += `
+      <tr>
+        <td>
+          <img src="${p.image || 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=100&q=80'}" alt="${p.name}" class="manager-thumb">
+        </td>
+        <td>
+          <strong style="display: block; color: var(--text-main); font-size: 0.92rem;">${p.name}</strong>
+          <span style="font-size: 0.78rem; color: var(--text-muted);">📍 ${p.address} (${p.district || 'Hà Nội'})</span>
+        </td>
+        <td>
+          <span class="sub-tag">${catName}</span>
+        </td>
+        <td>
+          <span style="font-weight: 800; color: #D97706;">★ ${p.rating.toFixed(1)}</span>
+          <span class="reviews-count-tag">(${reviewFormatted})</span>
+        </td>
+        <td style="text-align: center; white-space: nowrap;">
+          <button class="btn-row-action btn-row-edit" onclick="openEditPlaceModal('${p.id}')">
+            ✏️ Sửa
+          </button>
+          <button class="btn-row-action btn-row-delete" onclick="deletePlace('${p.id}')">
+            🗑️ Xóa
+          </button>
+        </td>
+      </tr>
+    `;
+  });
+
+  elements.managerTableBody.innerHTML = html;
+}
+
+/**
+ * Mở Modal Chỉnh Sửa Quán (Edit Place)
+ */
+function openEditPlaceModal(placeId) {
+  const place = state.places.find(p => p.id === placeId);
+  if (!place || !elements.editPlaceModal) return;
+
+  const catSelect = document.getElementById("editPlaceCategory");
+  if (catSelect) {
+    let catHtml = "";
+    state.categories.filter(c => c.id !== "all").forEach(c => {
+      catHtml += `<option value="${c.id}">${c.icon} ${c.name}</option>`;
+    });
+    catSelect.innerHTML = catHtml;
+    catSelect.value = place.category;
+  }
+
+  const distSelect = document.getElementById("editPlaceDistrict");
+  if (distSelect) {
+    let distHtml = "";
+    DISTRICTS.filter(d => d !== "Tất cả quận").forEach(d => {
+      distHtml += `<option value="${d}">${d}</option>`;
+    });
+    distSelect.innerHTML = distHtml;
+    distSelect.value = place.district || "Hoàn Kiếm";
+  }
+
+  document.getElementById("editPlaceId").value = place.id;
+  document.getElementById("editPlaceName").value = place.name;
+  document.getElementById("editPlaceAddress").value = place.address;
+  document.getElementById("editPlaceMapsUrl").value = place.mapsUrl || "";
+  document.getElementById("editPlaceRating").value = place.rating || 4.8;
+  document.getElementById("editPlaceReviewCount").value = place.reviewCount || 100;
+  document.getElementById("editPlacePrice").value = place.priceRange || "";
+  document.getElementById("editPlacePriceLevel").value = place.priceLevel || "mid";
+  document.getElementById("editPlaceTime").value = place.time || "";
+  document.getElementById("editPlaceMustTry").value = place.mustTry || "";
+  document.getElementById("editPlaceReview").value = place.review || "";
+  document.getElementById("editPlaceTags").value = (place.tags || []).join(", ");
+  document.getElementById("editPlaceImage").value = place.image || "";
+
+  elements.editPlaceModal.classList.add("active");
+}
+
+/**
+ * Xử lý Submit Form Chỉnh Sửa Quán
+ */
+function handleEditPlaceSubmit(e) {
+  e.preventDefault();
+  const id = document.getElementById("editPlaceId").value;
+  const index = state.places.findIndex(p => p.id === id);
+  if (index === -1) return;
+
+  const name = document.getElementById("editPlaceName").value.trim();
+  const category = document.getElementById("editPlaceCategory").value;
+  const district = document.getElementById("editPlaceDistrict").value;
+  const address = document.getElementById("editPlaceAddress").value.trim();
+  const mapsUrl = document.getElementById("editPlaceMapsUrl").value.trim() || `https://maps.google.com/?q=${encodeURIComponent(name + " " + address)}`;
+  const rating = parseFloat(document.getElementById("editPlaceRating").value) || 4.8;
+  const reviewCount = parseInt(document.getElementById("editPlaceReviewCount").value) || 100;
+  const priceRange = document.getElementById("editPlacePrice").value.trim();
+  const priceLevel = document.getElementById("editPlacePriceLevel").value;
+  const time = document.getElementById("editPlaceTime").value.trim();
+  const mustTry = document.getElementById("editPlaceMustTry").value.trim();
+  const review = document.getElementById("editPlaceReview").value.trim();
+  const tagsStr = document.getElementById("editPlaceTags").value.trim();
+  const image = document.getElementById("editPlaceImage").value.trim();
+
+  state.places[index] = {
+    ...state.places[index],
+    name,
+    category,
+    district,
+    address,
+    mapsUrl,
+    rating,
+    reviewCount,
+    priceRange,
+    priceLevel,
+    time,
+    mustTry,
+    review,
+    tags: tagsStr ? tagsStr.split(",").map(t => t.trim()).filter(Boolean) : [category, district],
+    image: image || state.places[index].image
+  };
+
+  localStorage.setItem(STORAGE_KEY_PLACES, JSON.stringify(state.places));
+  updateCategoryCounts();
+  renderCategoryPills();
+  renderProfile();
+  renderPlaces();
+  renderManagerTable();
+
+  elements.editPlaceModal.classList.remove("active");
+  showToast(`✏️ Đã cập nhật thông tin "${name}" thành công!`);
+}
+
+/**
+ * Xóa quán khỏi danh sách
+ */
+function deletePlace(placeId) {
+  const place = state.places.find(p => p.id === placeId);
+  if (!place) return;
+
+  if (confirm(`Bạn có chắc chắn muốn xóa quán "${place.name}" khỏi danh sách không?`)) {
+    state.places = state.places.filter(p => p.id !== placeId);
+    localStorage.setItem(STORAGE_KEY_PLACES, JSON.stringify(state.places));
+    updateCategoryCounts();
+    renderCategoryPills();
+    renderProfile();
+    renderPlaces();
+    renderManagerTable();
+    showToast(`🗑️ Đã xóa "${place.name}" khỏi danh sách!`);
+  }
+}
+
+/**
  * Modal Chia sẻ
  */
 function openShareModal() {
@@ -1047,6 +1357,15 @@ function showToast(message) {
   }, 2600);
 }
 
-// Gán toàn cục để gọi từ HTML inline nếu cần
+// Gán toàn cục để gọi từ HTML inline
 window.openPlaceDetailModal = openPlaceDetailModal;
+window.openEditPlaceModal = openEditPlaceModal;
+window.deletePlace = deletePlace;
 window.resetFilters = resetFilters;
+window.exportGoogleSheetsCSV = exportGoogleSheetsCSV;
+window.openPlaceManagerModal = openPlaceManagerModal;
+window.openAddPlaceModal = openAddPlaceModal;
+window.exportDataJSON = exportDataJSON;
+window.closeAllModals = closeAllModals;
+
+

@@ -44,7 +44,18 @@ document.addEventListener("DOMContentLoaded", () => {
  */
 function initData() {
   const savedPlaces = localStorage.getItem(STORAGE_KEY_PLACES);
-  state.places = savedPlaces ? JSON.parse(savedPlaces) : [...INITIAL_PLACES];
+  if (savedPlaces) {
+    try {
+      const parsed = JSON.parse(savedPlaces);
+      const existingIds = new Set(parsed.map(p => p.id));
+      const missing = INITIAL_PLACES.filter(p => !existingIds.has(p.id));
+      state.places = [...parsed, ...missing];
+    } catch (e) {
+      state.places = [...INITIAL_PLACES];
+    }
+  } else {
+    state.places = [...INITIAL_PLACES];
+  }
 
   const savedProfile = localStorage.getItem(STORAGE_KEY_PROFILE);
   state.profile = savedProfile ? JSON.parse(savedProfile) : { ...DEFAULT_PROFILE };
@@ -86,6 +97,10 @@ function cacheDOMElements() {
   elements.shareGuideBtn = document.getElementById("shareGuideBtn");
   elements.btnAddPlace = document.getElementById("btnAddPlace");
   elements.btnExportData = document.getElementById("btnExportData");
+
+  // Magic Auto-fill
+  elements.quickMapsUrlInput = document.getElementById("quickMapsUrlInput");
+  elements.btnQuickAutoFill = document.getElementById("btnQuickAutoFill");
 
   // Modals
   elements.placeDetailModal = document.getElementById("placeDetailModal");
@@ -211,6 +226,19 @@ function setupEventListeners() {
 
   if (elements.shareGuideBtn) {
     elements.shareGuideBtn.addEventListener("click", openShareModal);
+  }
+
+  // Magic Auto-fill từ Google Maps Link
+  if (elements.btnQuickAutoFill) {
+    elements.btnQuickAutoFill.addEventListener("click", handleMagicAutoFill);
+  }
+  if (elements.quickMapsUrlInput) {
+    elements.quickMapsUrlInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleMagicAutoFill();
+      }
+    });
   }
 
   // Mở modal thêm quán
@@ -683,6 +711,202 @@ function openAddPlaceModal() {
   }
 
   elements.addPlaceModal.classList.add("active");
+}
+
+/**
+ * 🪄 MAGIC AUTO-FILL: Tự động phân tích link Google Maps & điền toàn bộ thông tin
+ */
+function handleMagicAutoFill() {
+  const rawInput = (elements.quickMapsUrlInput ? elements.quickMapsUrlInput.value : "").trim();
+  if (!rawInput) {
+    showToast("⚠️ Vui lòng dán link Google Maps của quán!");
+    if (elements.quickMapsUrlInput) elements.quickMapsUrlInput.focus();
+    return;
+  }
+
+  // Visual feedback
+  if (elements.btnQuickAutoFill) {
+    elements.btnQuickAutoFill.innerHTML = "⏳ Đang phân tích...";
+    elements.btnQuickAutoFill.disabled = true;
+  }
+
+  try {
+    let extractedName = "";
+    let extractedAddress = "";
+    let cleanMapsUrl = rawInput;
+
+    // 1. Phân tích tên & địa chỉ từ URL Google Maps
+    // Dạng 1: /maps/place/Tên+Quán+Địa+Chỉ/@21.033,...
+    if (rawInput.includes("/maps/place/")) {
+      const match = rawInput.match(/\/maps\/place\/([^/@?]+)/);
+      if (match && match[1]) {
+        const decoded = decodeURIComponent(match[1].replace(/\+/g, " "));
+        const parts = decoded.split(",");
+        extractedName = parts[0].trim();
+        if (parts.length > 1) {
+          extractedAddress = parts.slice(1).join(", ").trim();
+        }
+      }
+    } 
+    // Dạng 2: ?q=Tên+Quán+Địa+Chỉ
+    else if (rawInput.includes("q=") || rawInput.includes("query=")) {
+      const match = rawInput.match(/[?&](?:q|query)=([^&]+)/);
+      if (match && match[1]) {
+        const decoded = decodeURIComponent(match[1].replace(/\+/g, " "));
+        const parts = decoded.split(",");
+        extractedName = parts[0].trim();
+        if (parts.length > 1) {
+          extractedAddress = parts.slice(1).join(", ").trim();
+        }
+      }
+    }
+    // Dạng 3: maps.app.goo.gl hoặc chuỗi text tìm kiếm
+    else {
+      // Nếu là link rút gọn hoặc văn bản tự do
+      extractedName = rawInput.replace(/https?:\/\/[^\s]+/g, "").trim();
+      if (!extractedName && (rawInput.includes("maps.app.goo.gl") || rawInput.includes("goo.gl"))) {
+        extractedName = "Địa điểm Google Maps";
+      }
+    }
+
+    if (!extractedName) {
+      extractedName = "Quán ngon Hà Nội";
+    }
+
+    // Nếu địa chỉ còn trống, tạo địa chỉ gợi ý từ tên hoặc khu vực
+    if (!extractedAddress) {
+      extractedAddress = extractedName.includes("Hà Nội") ? extractedName : `${extractedName}, Hà Nội`;
+    }
+
+    const fullSearchText = (extractedName + " " + extractedAddress + " " + rawInput).toLowerCase();
+
+    // 2. Nhận diện Quận / Khu vực tại Hà Nội
+    let detectedDistrict = "Hoàn Kiếm"; // Mặc định trung tâm
+    const districtKeywords = [
+      { name: "Hoàn Kiếm", keys: ["hoàn kiếm", "bát đàn", "hàng bạc", "hàng gai", "đinh tiên hoàng", "nguyễn hữu huân", "lý thái tổ", "đường thành", "hàng buồm", "hàng giầy", "hàng cân", "tạ hiện", "nhà thờ", "hàng trống", "phố cổ", "hồ gươm", "tràng tiền"] },
+      { name: "Ba Đình", keys: ["ba đình", "vạn bảo", "vạn phúc", "ngọc hà", "quán thánh", "giảng võ", "phan kế bính", "trúc bạch", "mạc đĩnh chi", "đội cấn", "kim mã", "liễu giai", "ngọc khánh", "núi trúc", "đốc ngữ", "hoàng hoa thám"] },
+      { name: "Hai Bà Trưng", keys: ["hai bà trưng", "lê văn hưu", "lò đúc", "tô hiến thành", "tăng bạt hổ", "lạc trung", "bà triệu", "phố huế", "bạch mai", "đại cồ việt", "minh khai", "times city"] },
+      { name: "Đống Đa", keys: ["đống đa", "đặng văn ngữ", "chùa bộc", "xã đàn", "thái hà", "tôn đức thắng", "ô chợ dừa", "huỳnh thúc kháng", "láng hạ", "hoàng cầu", "nguyên hồng"] },
+      { name: "Cầu Giấy", keys: ["cầu giấy", "duy tân", "xuân thủy", "trần thái tông", "hoàng quốc việt", "trung hòa", "vũ phạm hàm", "nguyễn khang", "nguyễn chánh", "dịch vọng"] },
+      { name: "Tây Hồ", keys: ["tây hồ", "quảng an", "tô ngọc vân", "xuân diệu", "trích sài", "lạc long quân", "âu cơ", "nghi tàm", "hồ tây", "nhật tân", "võ chí công"] },
+      { name: "Thanh Xuân", keys: ["thanh xuân", "nguyễn trãi", "nguyễn tuân", "khuất duy tiến", "lê văn lương", "vũ tông phan", "ngụy như kon tum", "royal city"] }
+    ];
+
+    for (const d of districtKeywords) {
+      if (d.keys.some(k => fullSearchText.includes(k))) {
+        detectedDistrict = d.name;
+        break;
+      }
+    }
+
+    // 3. Nhận diện Danh mục ẩm thực (Category)
+    let detectedCat = "mon-soi";
+    let detectedPriceLevel = "mid";
+    let detectedPriceRange = "40.000đ - 70.000đ";
+    let detectedMustTry = "Món đặc trưng của quán";
+    let detectedReview = "Quán ăn đậm đà chuẩn vị, không gian thoải mái sạch sẽ và phục vụ nhanh nhẹn. Rất đáng ghé thử!";
+    let detectedTags = ["Ăn ngon", detectedDistrict];
+    let detectedImage = "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80";
+
+    if (fullSearchText.match(/(bít tết|bit tet|steak|beefsteak|bò né|chảo gang|sushi|sashimi|ramen|pizza|pasta|dimsum|tokbokki|mì cay|nhật|hàn|âu)/)) {
+      detectedCat = "do-a-au";
+      detectedPriceLevel = "mid";
+      detectedPriceRange = "80.000đ - 180.000đ / người";
+      if (fullSearchText.match(/(bít tết|bit tet|steak|beefsteak|bò né|chảo gang)/)) {
+        detectedMustTry = "Bít tết bò chảo gang xèo xèo + Bánh mì nướng giòn + Trứng ốp la lòng đào";
+        detectedReview = "Bít tết thịt bò tươi mềm ngọt ngấm sốt đậm đà thơm nức trên chảo gang nóng xèo xèo, ăn kèm bánh mì nướng giòn rụm và dưa nộm thanh mát cực bắt miệng!";
+        detectedTags = ["Bít tết", "Chảo gang", "Ăn no", detectedDistrict];
+        detectedImage = "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80";
+      } else {
+        detectedMustTry = "Pizza 4 Phô mai mật ong / Sushi cá hồi tươi / Mì Ý sốt kem";
+        detectedReview = "Nguyên liệu tươi ngon chất lượng cao, cách bày trí tinh tế và phong cách phục vụ chu đáo, rất thích hợp cho hẹn hò.";
+        detectedTags = ["Đồ Á Âu", "Hẹn hò", detectedDistrict];
+        detectedImage = "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=800&q=80";
+      }
+    } else if (fullSearchText.match(/(cafe|cà phê|coffee|tea|trà|matcha|roastery|acoustic|dessert|bakery)/)) {
+      detectedCat = "cafe-chill";
+      detectedPriceLevel = "low";
+      detectedPriceRange = "35.000đ - 55.000đ";
+      detectedMustTry = "Cà phê sữa thơm ngậy / Cà phê trứng / Trà hoa quả";
+      detectedReview = "Không gian quán rất xinh xắn và ấm cúng, ánh sáng tự nhiên tuyệt vời để chụp ảnh và thư giãn. Đồ uống pha chế đậm đà, nhân viên chu đáo.";
+      detectedTags = ["Cafe chill", "Sống ảo", detectedDistrict];
+      detectedImage = "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80";
+    } else if (fullSearchText.match(/(lẩu|nướng|bbq|hotpot|bò nướng|nầm nướng|manwah|haidilao|kbbq)/)) {
+      detectedCat = "lau-nuong";
+      detectedPriceLevel = "high";
+      detectedPriceRange = "150.000đ - 250.000đ / người";
+      detectedMustTry = "Lẩu ếch măng cay / Nầm bò nướng sốt me / Lẩu riêu cua";
+      detectedReview = "Nước lẩu đậm đà tròn vị, đồ nhúng tươi ngon đầy đặn. Không gian rộng rãi rất thích hợp cho những buổi tụ tập bạn bè và gia đình.";
+      detectedTags = ["Lẩu nướng", "Tụ tập bạn bè", detectedDistrict];
+      detectedImage = "https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=800&q=80";
+    } else if (fullSearchText.match(/(cơm|xôi|cơm tấm|cơm rang|cơm niêu|cơm gà|cơm sườn)/)) {
+      detectedCat = "com-xoi";
+      detectedPriceLevel = "mid";
+      detectedPriceRange = "40.000đ - 65.000đ";
+      detectedMustTry = "Xôi xéo gà xào nấm / Cơm sườn nướng mật ong / Cơm rang dưa bò";
+      detectedReview = "Hạt xôi nếp thơm dẻo quẹo ngập hành phi béo ngậy, thịt tẩm ướp đậm đà vừa miệng, ăn no đẫy bụng.";
+      detectedTags = ["Cơm xôi", "Ăn no", detectedDistrict];
+      detectedImage = "https://images.unsplash.com/photo-1541696432-82c6da8ce7bf?auto=format&fit=crop&w=800&q=80";
+    } else if (fullSearchText.match(/(bánh mì|bánh cuốn|phở cuốn|gỏi cuốn|bánh bao|bánh gối)/)) {
+      detectedCat = "banh-mi-cuon";
+      detectedPriceLevel = "low";
+      detectedPriceRange = "30.000đ - 50.000đ";
+      detectedMustTry = "Bánh mì pate bơ thịt nguội / Phở cuốn bò thanh mát / Bánh cuốn chả quế";
+      detectedReview = "Vỏ bánh giòn rụm hoặc bánh cuốn tráng mỏng mềm mướt, nước chấm chua ngọt gia truyền chuẩn vị phố cổ.";
+      detectedTags = ["Bánh mì & cuốn", "Đặc sản", detectedDistrict];
+      detectedImage = "https://images.unsplash.com/photo-1509722747041-616f39b57569?auto=format&fit=crop&w=800&q=80";
+    } else if (fullSearchText.match(/(bia|nhậu|quán nhậu|bia hơi|mồi|lạc luộc|dê tái)/)) {
+      detectedCat = "quan-nhau";
+      detectedPriceLevel = "mid";
+      detectedPriceRange = "100.000đ - 180.000đ / người";
+      detectedMustTry = "Bia hơi lạnh bọt tuyết + Đậu lướt ván giòn + Bò xào măng trúc";
+      detectedReview = "Không khí sôi động đặc trưng Hà Nội, bia tươi mát lạnh cùng menu đồ nhắm phong phú lai rai tới bến.";
+      detectedTags = ["Quán nhậu", "Bia hơi", detectedDistrict];
+      detectedImage = "https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=800&q=80";
+    } else if (fullSearchText.match(/(chè|kem|nộm|nem chua|ốc|tào phớ|bánh tráng|ăn vặt|sữa chua)/)) {
+      detectedCat = "an-vat";
+      detectedPriceLevel = "low";
+      detectedPriceRange = "25.000đ - 45.000đ";
+      detectedMustTry = "Nộm bò khô thập cẩm / Nem chua rán giòn rụm / Chè khúc bạch";
+      detectedReview = "Món ăn vặt thơm ngon, giá cả bình dân học sinh sinh viên, tụ tập bạn bè chiều tan tầm cực đã.";
+      detectedTags = ["Ăn vặt", "Giá rẻ", detectedDistrict];
+      detectedImage = "https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80";
+    } else {
+      // Món sợi (Phở, Bún, Miến)
+      detectedCat = "mon-soi";
+      detectedPriceLevel = "mid";
+      detectedPriceRange = "45.000đ - 65.000đ";
+      detectedMustTry = "Phở tái nạm giòn chấm quẩy / Bún chả nướng than hoa / Bún riêu sườn sụn";
+      detectedReview = "Nước dùng trong ngọt thanh từ xương ống ninh kỹ, thịt tươi mềm thơm phức. Một bát nóng hổi ăn lúc nào cũng thấy ấm bụng!";
+      detectedTags = ["Món sợi", "Phở ngon", detectedDistrict];
+      detectedImage = "https://images.unsplash.com/photo-1582878826629-29b7ad1cdc43?auto=format&fit=crop&w=800&q=80";
+    }
+
+    // 4. Điền tự động vào các ô input trên Form
+    document.getElementById("newPlaceName").value = extractedName;
+    document.getElementById("newPlaceCategory").value = detectedCat;
+    document.getElementById("newPlaceDistrict").value = detectedDistrict;
+    document.getElementById("newPlaceAddress").value = extractedAddress;
+    document.getElementById("newPlaceMapsUrl").value = cleanMapsUrl;
+    document.getElementById("newPlaceRating").value = (4.7 + Math.random() * 0.2).toFixed(1);
+    document.getElementById("newPlacePriceLevel").value = detectedPriceLevel;
+    document.getElementById("newPlacePrice").value = detectedPriceRange;
+    document.getElementById("newPlaceTime").value = detectedCat === "cafe-chill" ? "07:30 - 22:30" : "07:00 - 21:30";
+    document.getElementById("newPlaceMustTry").value = detectedMustTry;
+    document.getElementById("newPlaceReview").value = detectedReview;
+    document.getElementById("newPlaceTags").value = detectedTags.join(", ");
+    document.getElementById("newPlaceImage").value = detectedImage;
+
+    showToast(`🪄 Đã tự động nhận diện: "${extractedName}" (${detectedDistrict})!`);
+  } catch (err) {
+    console.error("Auto-fill error:", err);
+    showToast("⚠️ Không thể tự động phân tích link, bạn hãy nhập thông tin thủ công nhé.");
+  } finally {
+    if (elements.btnQuickAutoFill) {
+      elements.btnQuickAutoFill.innerHTML = "✨ Quét & Tự điền";
+      elements.btnQuickAutoFill.disabled = false;
+    }
+  }
 }
 
 /**

@@ -393,6 +393,24 @@ const INITIAL_PLACES = [
     vibe: ["Ăn vặt", "Truyền thống", "Chill"],
     image: "https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=800&q=80",
     featured: false
+  },
+  {
+    id: "place-19",
+    name: "Bít Tết Ba Duy - Vạn Bảo",
+    category: "do-a-au",
+    district: "Ba Đình",
+    address: "105N3, Ngõ 34 Phố Vạn Bảo, Ngọc Hà, Ba Đình, Hà Nội",
+    mapsUrl: "https://maps.google.com/?q=Bit+Tet+Ba+Duy+105N3+Ngo+34+Van+Bao+Ba+Dinh+Ha+Noi",
+    rating: 4.8,
+    priceRange: "80.000đ - 150.000đ / người",
+    priceLevel: "mid",
+    time: "07:00 - 21:30",
+    mustTry: "Bít tết bò chảo gang sốt bơ tỏi / tiêu đen + Bánh mì giòn rụm + Salad dưa chuột",
+    review: "Quán bít tết lâu năm rất nổi tiếng ở khu Vạn Bảo. Thịt bò tươi mềm ngọt ngấm sốt đậm đà thơm nức trên chảo gang nóng xèo xèo, ăn kèm pate béo ngậy, trứng ốp la lòng đào và bánh mì nướng giòn tan.",
+    tags: ["Bít tết", "Chảo gang", "Vạn Bảo", "Ba Đình", "Ăn no"],
+    vibe: ["Gia đình", "Tụ tập bạn bè", "Hẹn hò"],
+    image: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80",
+    featured: true
   }
 ];
 

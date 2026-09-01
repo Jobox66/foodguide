@@ -94,35 +94,47 @@
       </div>
     </section>
 
-    <!-- SEARCH & ADVANCED FILTERS PANEL -->
+    <!-- SEARCH & ADVANCED FILTERS PANEL (Horizontal Scroll Friendly) -->
     <section class="filters-panel">
+      <!-- Search Input -->
       <div class="search-box-row">
         <span class="search-icon">🔍</span>
-        <input type="text" id="searchInput" class="search-input" placeholder="Tìm kiếm theo tên quán, món ăn, phố xá (vd: Phở Bát Đàn, Cà phê trứng, Lò Đúc...)" autocomplete="off">
+        <input type="text" id="searchInput" class="search-input" placeholder="Tìm tên quán, món ăn, phố xá (Phở Bát Đàn, Cafe trứng, Lò Đúc...)" autocomplete="off">
         <button id="searchClearBtn" class="search-clear-btn" title="Xóa tìm kiếm">✕</button>
       </div>
 
-      <div class="filter-dropdowns-row">
-        <select id="districtSelect" class="select-filter" aria-label="Lọc theo quận">
-          <!-- Render tự động -->
-        </select>
-
-        <div class="pill-group" role="group" aria-label="Lọc theo mức giá">
-          <button class="price-pill active" data-price="all">Mọi mức giá</button>
-          <button class="price-pill" data-price="low">&lt; 50k</button>
-          <button class="price-pill" data-price="mid">50k - 150k</button>
-          <button class="price-pill" data-price="high">&gt; 150k</button>
+      <!-- District Horizontal Scroll Track -->
+      <div class="filter-scroll-wrapper">
+        <div class="filter-scroll-title">📍 Quận:</div>
+        <div id="districtPills" class="filter-scroll-track">
+          <!-- Render tự động từ app.js -->
         </div>
+      </div>
 
-        <select id="sortSelect" class="select-filter" style="margin-left: auto;" aria-label="Sắp xếp">
-          <option value="featured">⭐ Đề xuất hàng đầu</option>
-          <option value="rating">★ Đánh giá cao nhất</option>
-          <option value="name">🔤 Tên A - Z</option>
-        </select>
+      <!-- Price & Sort Quick Filter Horizontal Scroll Track -->
+      <div class="filter-scroll-wrapper" style="margin-top: 8px;">
+        <div class="filter-scroll-title">⚡ Lọc:</div>
+        <div id="quickFilterPills" class="filter-scroll-track">
+          <!-- Price Chips -->
+          <button class="filter-chip price-chip active" data-price="all">💵 Mọi mức giá</button>
+          <button class="filter-chip price-chip" data-price="low">&lt; 50k</button>
+          <button class="filter-chip price-chip" data-price="mid">50k - 150k</button>
+          <button class="filter-chip price-chip" data-price="high">&gt; 150k</button>
 
-        <button id="resetFiltersBtn" class="btn-reset-filters">
-          Đặt lại
-        </button>
+          <span class="filter-divider"></span>
+
+          <!-- Sort Chips -->
+          <button class="filter-chip sort-chip active" data-sort="featured">⭐ Đề xuất</button>
+          <button class="filter-chip sort-chip" data-sort="rating">★ Điểm cao</button>
+          <button class="filter-chip sort-chip" data-sort="name">🔤 Tên A-Z</button>
+
+          <span class="filter-divider"></span>
+
+          <!-- Reset Chip -->
+          <button id="resetFiltersBtn" class="filter-chip reset-chip" title="Đặt lại toàn bộ bộ lọc">
+            🔄 Đặt lại
+          </button>
+        </div>
       </div>
     </section>
 
@@ -162,6 +174,7 @@
        =================================================================== -->
   <div id="placeDetailModal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-card">
+      <div class="sheet-drag-handle"></div>
       <button class="modal-close-btn" title="Đóng">✕</button>
       <div id="placeModalContent">
         <!-- Render chi tiết nội dung quán -->
@@ -174,6 +187,7 @@
        =================================================================== -->
   <div id="addPlaceModal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-card">
+      <div class="sheet-drag-handle"></div>
       <button class="modal-close-btn" title="Đóng">✕</button>
       <div class="modal-body">
         <h2 class="modal-title" style="margin-bottom: 14px;">➕ Thêm Quán Ăn / Cafe Mới</h2>
@@ -282,6 +296,7 @@
        =================================================================== -->
   <div id="shareModal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-card" style="max-width: 440px;">
+      <div class="sheet-drag-handle"></div>
       <button class="modal-close-btn" title="Đóng">✕</button>
       <div class="modal-body" style="text-align: center;">
         <div style="font-size: 2.4rem; margin-bottom: 8px;">💌</div>
@@ -309,6 +324,7 @@
        =================================================================== -->
   <div id="placeManagerModal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-card manager-modal-card">
+      <div class="sheet-drag-handle"></div>
       <button class="modal-close-btn" title="Đóng">✕</button>
       <div class="modal-body">
         <h2 class="modal-title" style="margin-bottom: 6px;">⚙️ Quản Lý & Điều Chỉnh Danh Sách Quán</h2>
@@ -359,6 +375,7 @@
        =================================================================== -->
   <div id="editPlaceModal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-card">
+      <div class="sheet-drag-handle"></div>
       <button class="modal-close-btn" title="Đóng">✕</button>
       <div class="modal-body">
         <h2 class="modal-title" style="margin-bottom: 14px;">✏️ Chỉnh Sửa Thông Tin Quán</h2>
@@ -448,6 +465,37 @@
       </div>
     </div>
   </div>
+
+  <!-- ===================================================================
+       MOBILE BOTTOM NAVIGATION BAR (Dành riêng cho thiết bị di động)
+       =================================================================== -->
+  <nav id="mobileBottomNav" class="mobile-bottom-nav" aria-label="Mobile Navigation">
+    <div class="mobile-nav-items">
+      <button class="mobile-nav-btn active" data-nav-view="explorer">
+        <span class="nav-icon">🔍</span>
+        <span>Khám phá</span>
+      </button>
+
+      <button class="mobile-nav-btn" data-nav-view="portal">
+        <span class="nav-icon">📑</span>
+        <span>Danh mục</span>
+      </button>
+
+      <button id="btnMobileAddPlace" class="mobile-nav-add-btn" title="Thêm quán mới" aria-label="Thêm quán">
+        <span>+</span>
+      </button>
+
+      <button id="btnMobileManager" class="mobile-nav-btn">
+        <span class="nav-icon">⚙️</span>
+        <span>Quản lý</span>
+      </button>
+
+      <button id="btnMobileTheme" class="mobile-nav-btn">
+        <span id="mobileThemeIcon" class="nav-icon">🌙</span>
+        <span>Giao diện</span>
+      </button>
+    </div>
+  </nav>
 
   <!-- TOAST NOTIFICATION CONTAINER -->
   <div id="toastContainer" class="toast-container"></div>

@@ -87,9 +87,9 @@ function cacheDOMElements() {
 
   elements.searchInput = document.getElementById("searchInput");
   elements.searchClearBtn = document.getElementById("searchClearBtn");
-  elements.districtSelect = document.getElementById("districtSelect");
-  elements.sortSelect = document.getElementById("sortSelect");
-  elements.pricePills = document.querySelectorAll(".price-pill");
+  elements.districtPills = document.getElementById("districtPills");
+  elements.priceChips = document.querySelectorAll(".price-chip");
+  elements.sortChips = document.querySelectorAll(".sort-chip");
   elements.resetFiltersBtn = document.getElementById("resetFiltersBtn");
 
   elements.viewTabs = document.querySelectorAll(".view-tab");
@@ -127,6 +127,14 @@ function cacheDOMElements() {
 
   // Toasts
   elements.toastContainer = document.getElementById("toastContainer");
+
+  // Mobile Bottom Nav
+  elements.mobileBottomNav = document.getElementById("mobileBottomNav");
+  elements.mobileNavButtons = document.querySelectorAll(".mobile-nav-btn[data-nav-view]");
+  elements.btnMobileAddPlace = document.getElementById("btnMobileAddPlace");
+  elements.btnMobileManager = document.getElementById("btnMobileManager");
+  elements.btnMobileTheme = document.getElementById("btnMobileTheme");
+  elements.mobileThemeIcon = document.getElementById("mobileThemeIcon");
 }
 
 /**
@@ -151,6 +159,9 @@ function updateThemeIcon() {
   if (elements.themeToggleBtn) {
     elements.themeToggleBtn.innerHTML = state.theme === "dark" ? "☀️" : "🌙";
     elements.themeToggleBtn.setAttribute("title", state.theme === "dark" ? "Chuyển sang giao diện Sáng" : "Chuyển sang giao diện Tối");
+  }
+  if (elements.mobileThemeIcon) {
+    elements.mobileThemeIcon.innerHTML = state.theme === "dark" ? "☀️" : "🌙";
   }
 }
 
@@ -191,28 +202,24 @@ function setupEventListeners() {
     });
   }
 
-  // Lọc theo quận
-  if (elements.districtSelect) {
-    elements.districtSelect.addEventListener("change", (e) => {
-      state.selectedDistrict = e.target.value;
+  // Lọc mức giá (Price Chips)
+  document.querySelectorAll(".price-chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      state.selectedPriceLevel = chip.dataset.price;
+      document.querySelectorAll(".price-chip").forEach(c => {
+        c.classList.toggle("active", c.dataset.price === state.selectedPriceLevel);
+      });
       renderPlaces();
     });
-  }
+  });
 
-  // Sắp xếp
-  if (elements.sortSelect) {
-    elements.sortSelect.addEventListener("change", (e) => {
-      state.sortBy = e.target.value;
-      renderPlaces();
-    });
-  }
-
-  // Lọc mức giá
-  elements.pricePills.forEach(pill => {
-    pill.addEventListener("click", () => {
-      elements.pricePills.forEach(p => p.classList.remove("active"));
-      pill.classList.add("active");
-      state.selectedPriceLevel = pill.dataset.price;
+  // Sắp xếp (Sort Chips)
+  document.querySelectorAll(".sort-chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      state.sortBy = chip.dataset.sort;
+      document.querySelectorAll(".sort-chip").forEach(c => {
+        c.classList.toggle("active", c.dataset.sort === state.sortBy);
+      });
       renderPlaces();
     });
   });
@@ -222,18 +229,36 @@ function setupEventListeners() {
     elements.resetFiltersBtn.addEventListener("click", resetFilters);
   }
 
-  // Chuyển chế độ xem (Explorer vs Portal)
+  // Chuyển chế độ xem (View Mode Tabs Desktop)
   elements.viewTabs.forEach(tab => {
     tab.addEventListener("click", () => {
-      elements.viewTabs.forEach(t => t.classList.remove("active"));
-      tab.classList.add("active");
-      state.viewMode = tab.dataset.view;
-      localStorage.setItem(STORAGE_KEY_VIEW, state.viewMode);
-      renderViewMode();
+      setViewMode(tab.dataset.view);
     });
   });
 
-  // Nút theme & share
+  // Mobile Bottom Navigation Events
+  if (elements.mobileNavButtons) {
+    elements.mobileNavButtons.forEach(btn => {
+      btn.addEventListener("click", () => {
+        const mode = btn.dataset.navView;
+        setViewMode(mode);
+      });
+    });
+  }
+
+  if (elements.btnMobileAddPlace) {
+    elements.btnMobileAddPlace.addEventListener("click", openAddPlaceModal);
+  }
+
+  if (elements.btnMobileManager) {
+    elements.btnMobileManager.addEventListener("click", openPlaceManagerModal);
+  }
+
+  if (elements.btnMobileTheme) {
+    elements.btnMobileTheme.addEventListener("click", toggleTheme);
+  }
+
+  // Nút theme & share Desktop
   if (elements.themeToggleBtn) {
     elements.themeToggleBtn.addEventListener("click", toggleTheme);
   }
@@ -340,11 +365,22 @@ function resetFilters() {
 
   if (elements.searchInput) elements.searchInput.value = "";
   if (elements.searchClearBtn) elements.searchClearBtn.classList.remove("visible");
-  if (elements.districtSelect) elements.districtSelect.value = "Tất cả quận";
-  if (elements.sortSelect) elements.sortSelect.value = "featured";
 
-  elements.pricePills.forEach(p => {
+  // Reset active classes on District Chips
+  if (elements.districtPills) {
+    elements.districtPills.querySelectorAll(".district-chip").forEach(c => {
+      c.classList.toggle("active", c.dataset.district === "Tất cả quận");
+    });
+  }
+
+  // Reset Price Chips
+  document.querySelectorAll(".price-chip").forEach(p => {
     p.classList.toggle("active", p.dataset.price === "all");
+  });
+
+  // Reset Sort Chips
+  document.querySelectorAll(".sort-chip").forEach(s => {
+    s.classList.toggle("active", s.dataset.sort === "featured");
   });
 
   renderCategoryPills();
@@ -357,7 +393,7 @@ function resetFilters() {
  */
 function renderAll() {
   renderProfile();
-  renderDistrictsDropdown();
+  renderDistrictsPills();
   renderCategoryPills();
   renderViewMode();
 }
@@ -391,16 +427,32 @@ function renderProfile() {
 }
 
 /**
- * Render dropdown danh sách quận
+ * Render thanh cuộn ngang danh sách quận (District Chips)
  */
-function renderDistrictsDropdown() {
-  if (!elements.districtSelect) return;
+function renderDistrictsPills() {
+  if (!elements.districtPills) return;
   let html = "";
   DISTRICTS.forEach(d => {
-    html += `<option value="${d}">${d}</option>`;
+    const isActive = state.selectedDistrict === d ? "active" : "";
+    const icon = d === "Tất cả quận" ? "📍" : "🏙️";
+    html += `
+      <button class="filter-chip district-chip ${isActive}" data-district="${d}">
+        ${icon} ${d}
+      </button>
+    `;
   });
-  elements.districtSelect.innerHTML = html;
-  elements.districtSelect.value = state.selectedDistrict;
+  elements.districtPills.innerHTML = html;
+
+  // Lắng nghe sự kiện click trên từng chip quận
+  elements.districtPills.querySelectorAll(".district-chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      state.selectedDistrict = chip.dataset.district;
+      elements.districtPills.querySelectorAll(".district-chip").forEach(c => {
+        c.classList.toggle("active", c.dataset.district === state.selectedDistrict);
+      });
+      renderPlaces();
+    });
+  });
 }
 
 /**
@@ -446,9 +498,21 @@ function renderCategoryPills() {
 function setViewMode(mode) {
   state.viewMode = mode;
   localStorage.setItem(STORAGE_KEY_VIEW, mode);
-  elements.viewTabs.forEach(t => {
-    t.classList.toggle("active", t.dataset.view === mode);
-  });
+  
+  // Đồng bộ Desktop Tabs
+  if (elements.viewTabs) {
+    elements.viewTabs.forEach(t => {
+      t.classList.toggle("active", t.dataset.view === mode);
+    });
+  }
+
+  // Đồng bộ Mobile Bottom Nav
+  if (elements.mobileNavButtons) {
+    elements.mobileNavButtons.forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.navView === mode);
+    });
+  }
+
   renderViewMode();
 }
 

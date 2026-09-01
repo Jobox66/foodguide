@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <title>Hanoi Food & Cafe Guide | Cẩm Nang Ẩm Thực & Cà Phê Chọn Lọc</title>
+  
+  <!-- SEO & Social Meta -->
+  <meta name="description" content="Tổng hợp các quán ăn ngon, quán cà phê chill tại Hà Nội kèm đánh giá chi tiết, món must-try, mức giá và liên kết chỉ đường Google Maps nhanh chóng.">
+  <meta name="keywords" content="food guide, quan an ha noi, cafe ha noi, pho ngon ha noi, bun cha, cafe trung, linkbio food">
+  <meta name="author" content="Foodie Hanoi">
+  
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Hanoi Food & Cafe Guide | Cẩm Nang Quán Ngon Chọn Lọc">
+  <meta property="og:description" content="Khám phá quán ăn ngon & cafe chill tại Hà Nội với đánh giá cá nhân và định vị Google Maps 1 chạm.">
+  <meta property="og:image" content="https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1200&q=80">
+  
+  <meta name="theme-color" content="#FFDC4E">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍜</text></svg>">
+  
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <div class="app-container">
+    
+    <!-- HERO / PROFILE SECTION (Linkbio Style) -->
+    <header class="hero-bio">
+      <div class="bio-top-bar">
+        <span class="bio-badge">✨ Cẩm Nang Ẩm Thực Hà Nội</span>
+        <div class="header-actions">
+          <button id="themeToggleBtn" class="icon-btn" title="Đổi giao diện Tối/Sáng" aria-label="Đổi giao diện">🌙</button>
+          <button id="btnExportData" class="icon-btn" title="Sao lưu / Xuất dữ liệu JSON" aria-label="Xuất dữ liệu">💾</button>
+          <button id="shareGuideBtn" class="icon-btn" title="Chia sẻ trang này" aria-label="Chia sẻ">🔗</button>
+        </div>
+      </div>
+
+      <div class="bio-profile">
+        <div class="avatar-wrapper">
+          <img id="profileAvatar" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80" alt="Avatar" class="profile-avatar">
+          <span class="verified-dot" title="Tác giả được xác thực">✓</span>
+        </div>
+        <div class="bio-info">
+          <h1 id="profileName" class="bio-name">Hanoi Food & Cafe Guide</h1>
+          <span id="profileHandle" class="bio-handle">@foodie_hanoi</span>
+          <p id="profileBio" class="bio-desc">
+            Cẩm nang quán ăn & cà phê chọn lọc tại Hà Nội. Review chân thực, gắn link Google Maps trực tiếp và gợi ý món ngon nhất định phải thử! 🥢✨
+          </p>
+        </div>
+      </div>
+
+      <div class="bio-footer">
+        <div id="socialLinksContainer" class="social-links">
+          <!-- Render tự động từ app.js -->
+        </div>
+        <div id="profileStats" class="bio-stats">
+          <!-- Render tự động từ app.js -->
+        </div>
+      </div>
+    </header>
+
+    <!-- VIEW MODE SWITCHER & ACTIONS -->
+    <div class="control-bar">
+      <div class="view-mode-tabs" role="tablist">
+        <button class="view-tab active" data-view="explorer" role="tab" aria-selected="true">
+          🔍 Khám phá quán ăn
+        </button>
+        <button class="view-tab" data-view="portal" role="tab" aria-selected="false">
+          📑 Danh mục Google Maps
+        </button>
+      </div>
+
+      <button id="btnAddPlace" class="btn-add-place">
+        <span>+</span> Thêm quán mới
+      </button>
+    </div>
+
+    <!-- CATEGORY PILLS (Lọc nhanh danh mục) -->
+    <section class="categories-slider-wrapper">
+      <div class="section-label">
+        <span>Danh mục món ngon</span>
+      </div>
+      <div id="categoryPills" class="categories-pills">
+        <!-- Render tự động từ data.js -->
+      </div>
+    </section>
+
+    <!-- SEARCH & ADVANCED FILTERS PANEL -->
+    <section class="filters-panel">
+      <div class="search-box-row">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" class="search-input" placeholder="Tìm kiếm theo tên quán, món ăn, phố xá (vd: Phở Bát Đàn, Cà phê trứng, Lò Đúc...)" autocomplete="off">
+        <button id="searchClearBtn" class="search-clear-btn" title="Xóa tìm kiếm">✕</button>
+      </div>
+
+      <div class="filter-dropdowns-row">
+        <select id="districtSelect" class="select-filter" aria-label="Lọc theo quận">
+          <!-- Render tự động -->
+        </select>
+
+        <div class="pill-group" role="group" aria-label="Lọc theo mức giá">
+          <button class="price-pill active" data-price="all">Mọi mức giá</button>
+          <button class="price-pill" data-price="low">&lt; 50k</button>
+          <button class="price-pill" data-price="mid">50k - 150k</button>
+          <button class="price-pill" data-price="high">&gt; 150k</button>
+        </div>
+
+        <select id="sortSelect" class="select-filter" style="margin-left: auto;" aria-label="Sắp xếp">
+          <option value="featured">⭐ Đề xuất hàng đầu</option>
+          <option value="rating">★ Đánh giá cao nhất</option>
+          <option value="name">🔤 Tên A - Z</option>
+        </select>
+
+        <button id="resetFiltersBtn" class="btn-reset-filters">
+          Đặt lại
+        </button>
+      </div>
+    </section>
+
+    <!-- RESULTS HEADER (Count) -->
+    <div class="results-header">
+      <div id="resultsCount" class="results-count">
+        Đang tải danh sách quán...
+      </div>
+    </div>
+
+    <!-- MAIN VIEW: EXPLORER CARDS GRID -->
+    <main id="placesContainer" class="places-grid">
+      <!-- Render các thẻ quán ăn tại đây -->
+    </main>
+
+    <!-- ALTERNATIVE VIEW: PORTAL / LINKBIO CATEGORIES (Style oreviet) -->
+    <section id="portalContainer" style="display: none;">
+      <!-- Render các thẻ danh mục lớn tại đây -->
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="app-footer">
+      <div class="footer-links">
+        <a href="javascript:void(0)" onclick="resetFilters()" class="footer-link">Trang chủ</a>
+        <span>•</span>
+        <a href="javascript:void(0)" onclick="openAddPlaceModal()" class="footer-link">Đóng góp quán</a>
+        <span>•</span>
+        <a href="javascript:void(0)" onclick="exportDataJSON()" class="footer-link">Tải dữ liệu</a>
+      </div>
+      <p>© 2026 Hanoi Food & Cafe Guide. Tuyển tập ẩm thực chất lượng cao tại Thủ đô.</p>
+    </footer>
+
+  </div>
+
+  <!-- ===================================================================
+       MODAL: CHI TIẾT QUÁN ĂN (Place Detail Modal)
+       =================================================================== -->
+  <div id="placeDetailModal" class="modal-overlay" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <button class="modal-close-btn" title="Đóng">✕</button>
+      <div id="placeModalContent">
+        <!-- Render chi tiết nội dung quán -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================
+       MODAL: THÊM QUÁN MỚI (Add Place Modal)
+       =================================================================== -->
+  <div id="addPlaceModal" class="modal-overlay" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <button class="modal-close-btn" title="Đóng">✕</button>
+      <div class="modal-body">
+        <h2 class="modal-title" style="margin-bottom: 14px;">➕ Thêm Quán Ăn / Cafe Mới</h2>
+        <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 18px;">
+          Nhập thông tin quán ăn yêu thích của bạn để đưa vào cẩm nang ẩm thực.
+        </p>
+
+        <form id="addPlaceForm">
+          <div class="form-group">
+            <label class="form-label" for="newPlaceName">Tên quán ăn / cafe *</label>
+            <input type="text" id="newPlaceName" class="form-input" placeholder="Ví dụ: Phở Bát Đàn, Yên Cafe..." required>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="newPlaceCategory">Danh mục món</label>
+              <select id="newPlaceCategory" class="form-select">
+                <!-- Dropdown danh mục -->
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="newPlaceDistrict">Quận / Khu vực</label>
+              <select id="newPlaceDistrict" class="form-select">
+                <!-- Dropdown quận -->
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="newPlaceAddress">Địa chỉ chi tiết *</label>
+            <input type="text" id="newPlaceAddress" class="form-input" placeholder="Số nhà, tên đường, phường, quận..." required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="newPlaceMapsUrl">Link Google Maps (Tùy chọn)</label>
+            <input type="url" id="newPlaceMapsUrl" class="form-input" placeholder="https://maps.app.goo.gl/... (nếu để trống hệ thống sẽ tự tạo link tìm kiếm)">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="newPlaceRating">Điểm đánh giá (1.0 - 5.0)</label>
+              <input type="number" id="newPlaceRating" class="form-input" min="1.0" max="5.0" step="0.1" value="4.8">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="newPlacePriceLevel">Mức giá</label>
+              <select id="newPlacePriceLevel" class="form-select">
+                <option value="low">Bình dân (&lt; 50k)</option>
+                <option value="mid" selected>Trung bình (50k - 150k)</option>
+                <option value="high">Cao cấp (&gt; 150k)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="newPlacePrice">Khoảng giá hiển thị</label>
+              <input type="text" id="newPlacePrice" class="form-input" placeholder="Vd: 35.000đ - 60.000đ">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="newPlaceTime">Giờ mở cửa</label>
+              <input type="text" id="newPlaceTime" class="form-input" placeholder="Vd: 07:00 - 22:00">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="newPlaceMustTry">Món ngon Must-Try (Gợi ý nên gọi)</label>
+            <input type="text" id="newPlaceMustTry" class="form-input" placeholder="Vd: Phở tái gầu giòn chấm quẩy, Cafe trứng nóng...">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="newPlaceReview">Đánh giá & Review của bạn</label>
+            <textarea id="newPlaceReview" class="form-textarea" rows="3" placeholder="Chia sẻ cảm nhận về hương vị, không gian, chỗ để xe, lưu ý khi đi ăn..."></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="newPlaceTags">Tags (cách nhau bởi dấu phẩy)</label>
+            <input type="text" id="newPlaceTags" class="form-input" placeholder="Vd: Phố cổ, Ăn sáng, View đẹp, Hẹn hò">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="newPlaceImage">Link hình ảnh món ăn (Tùy chọn)</label>
+            <input type="url" id="newPlaceImage" class="form-input" placeholder="https://images.unsplash.com/...">
+          </div>
+
+          <button type="submit" class="btn-submit">💾 Lưu & Thêm vào Cẩm Nang</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================
+       MODAL: CHIA SẺ TRANG (Share Modal)
+       =================================================================== -->
+  <div id="shareModal" class="modal-overlay" role="dialog" aria-modal="true">
+    <div class="modal-card" style="max-width: 440px;">
+      <button class="modal-close-btn" title="Đóng">✕</button>
+      <div class="modal-body" style="text-align: center;">
+        <div style="font-size: 2.4rem; margin-bottom: 8px;">💌</div>
+        <h2 class="modal-title">Chia Sẻ Food Guide</h2>
+        <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 18px;">
+          Gửi danh sách quán ăn yêu thích của bạn cho bạn bè & người thân!
+        </p>
+
+        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+          <input type="text" id="shareUrlInput" class="form-input" readonly>
+          <button id="btnCopyShareUrl" class="btn-open-maps" style="white-space: nowrap; padding: 0 16px;">
+            📋 Copy
+          </button>
+        </div>
+
+        <p style="font-size: 0.8rem; color: var(--text-light);">
+          Tip: Bạn có thể cài đặt hoặc thêm trang web này vào Màn hình chính (Add to Home Screen) trên iPhone/Android để mở xem bất cứ lúc nào!
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- SCRIPTS -->
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

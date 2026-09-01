@@ -47,9 +47,19 @@ function initData() {
   if (savedPlaces) {
     try {
       const parsed = JSON.parse(savedPlaces);
-      const existingIds = new Set(parsed.map(p => p.id));
-      const missing = INITIAL_PLACES.filter(p => !existingIds.has(p.id));
-      state.places = [...parsed, ...missing];
+      const defaultMap = new Map(INITIAL_PLACES.map(p => [p.id, p]));
+      const userCustom = parsed.filter(p => !defaultMap.has(p.id));
+      
+      // Đồng bộ thông tin chuẩn xác của các quán mặc định (Rating, ReviewCount, Price)
+      const updatedDefaults = INITIAL_PLACES.map(def => {
+        const userEdit = parsed.find(p => p.id === def.id);
+        if (userEdit) {
+          return { ...def, ...userEdit, rating: def.rating, reviewCount: def.reviewCount, priceRange: def.priceRange };
+        }
+        return def;
+      });
+      
+      state.places = [...updatedDefaults, ...userCustom];
     } catch (e) {
       state.places = [...INITIAL_PLACES];
     }

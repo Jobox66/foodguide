@@ -460,18 +460,13 @@ body {
   letter-spacing: 0.5px;
 }
 
-/* Desktop: 1 hàng ngang vuốt mượt mà */
+/* Desktop: Hiển thị full tất cả các danh mục theo hàng ngang, tự động xuống dòng khi hết chỗ */
 .categories-pills {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  overflow-x: auto;
-  padding: 4px 2px;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-
-.categories-pills::-webkit-scrollbar {
-  display: none;
+  padding: 4px 0;
+  overflow: visible;
 }
 
 .cat-pill {
@@ -489,7 +484,6 @@ body {
   color: var(--text-main);
   cursor: pointer;
   white-space: nowrap;
-  flex-shrink: 0;
   min-width: 0;
   box-shadow: var(--shadow-subtle);
   transition: var(--transition);

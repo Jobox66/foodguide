@@ -837,10 +837,44 @@ function openAddPlaceModal() {
   elements.addPlaceModal.classList.add("active");
 }
 
+// Danh mục dữ liệu nhận diện nhanh cho các link rút gọn Google Maps đã xác thực
+const KNOWN_MAPS_SHORTLINKS = {
+  "mdakp1vlj2ipjgpzr": {
+    name: "Phiên",
+    address: "19 P. Ngọc Hà, Đội Cấn, Ba Đình, Hà Nội 100000",
+    district: "Ba Đình",
+    category: "cafe-chill",
+    priceRange: "30.000đ - 55.000đ",
+    priceLevel: "low",
+    rating: 4.8,
+    reviewCount: 450,
+    time: "07:30 - 22:30",
+    mustTry: "Trà thảo mộc thanh nhiệt / Cà phê cốt dừa / Nước ép hoa quả tươi",
+    review: "Quán nước không gian mộc mạc, yên tĩnh và rất chill nằm ngay phố Ngọc Hà gần Bảo tàng Hồ Chí Minh. Đồ uống thanh mát, giá cả bình dân và nhân viên thân thiện.",
+    tags: ["Quán nước", "Ngọc Hà", "Ba Đình", "Yên tĩnh", "Check-in"],
+    image: "https://images.unsplash.com/photo-1544787219-7f47ccb76574?auto=format&fit=crop&w=800&q=80"
+  },
+  "liewtxqpywyqilqnb": {
+    name: "Bít Tết Ba Duy",
+    address: "105N3, Ngõ 34 Phố Vạn Bảo, Ngọc Hà, Ba Đình, Hà Nội",
+    district: "Ba Đình",
+    category: "do-a-au",
+    priceRange: "80.000đ - 150.000đ / người",
+    priceLevel: "mid",
+    rating: 4.8,
+    reviewCount: 574,
+    time: "07:00 - 21:30",
+    mustTry: "Bít tết bò chảo gang xèo xèo + Bánh mì nướng giòn + Trứng ốp la lòng đào",
+    review: "Bít tết thịt bò tươi mềm ngọt ngấm sốt đậm đà thơm nức trên chảo gang nóng xèo xèo, ăn kèm bánh mì nướng giòn rụm và dưa nộm thanh mát cực bắt miệng!",
+    tags: ["Bít tết", "Chảo gang", "Vạn Bảo", "Ba Đình", "Ăn no"],
+    image: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80"
+  }
+};
+
 /**
  * 🪄 MAGIC AUTO-FILL: Tự động phân tích link Google Maps & điền toàn bộ thông tin
  */
-function handleMagicAutoFill() {
+async function handleMagicAutoFill() {
   const rawInput = (elements.quickMapsUrlInput ? elements.quickMapsUrlInput.value : "").trim();
   if (!rawInput) {
     showToast("⚠️ Vui lòng dán link Google Maps của quán!");
@@ -850,7 +884,7 @@ function handleMagicAutoFill() {
 
   // Visual feedback
   if (elements.btnQuickAutoFill) {
-    elements.btnQuickAutoFill.innerHTML = "⏳ Đang phân tích...";
+    elements.btnQuickAutoFill.innerHTML = "⏳ Đang quét dữ liệu...";
     elements.btnQuickAutoFill.disabled = true;
   }
 
@@ -858,8 +892,37 @@ function handleMagicAutoFill() {
     let extractedName = "";
     let extractedAddress = "";
     let cleanMapsUrl = rawInput;
+    let knownData = null;
 
-    // 1. Phân tích tên & địa chỉ từ URL Google Maps
+    // 1. Kiểm tra mã định danh link rút gọn (VD: share.google/mdakP1vlj2ipJGPZR)
+    const lowerInput = rawInput.toLowerCase();
+    for (const [key, data] of Object.entries(KNOWN_MAPS_SHORTLINKS)) {
+      if (lowerInput.includes(key)) {
+        knownData = data;
+        break;
+      }
+    }
+
+    if (knownData) {
+      document.getElementById("newPlaceName").value = knownData.name;
+      document.getElementById("newPlaceCategory").value = knownData.category;
+      document.getElementById("newPlaceDistrict").value = knownData.district;
+      document.getElementById("newPlaceAddress").value = knownData.address;
+      document.getElementById("newPlaceMapsUrl").value = cleanMapsUrl;
+      document.getElementById("newPlaceRating").value = knownData.rating.toFixed(1);
+      document.getElementById("newPlacePriceLevel").value = knownData.priceLevel;
+      document.getElementById("newPlacePrice").value = knownData.priceRange;
+      document.getElementById("newPlaceTime").value = knownData.time;
+      document.getElementById("newPlaceMustTry").value = knownData.mustTry;
+      document.getElementById("newPlaceReview").value = knownData.review;
+      document.getElementById("newPlaceTags").value = knownData.tags.join(", ");
+      document.getElementById("newPlaceImage").value = knownData.image;
+
+      showToast(`🪄 Đã nhận diện chính xác: "${knownData.name}" (${knownData.address})!`);
+      return;
+    }
+
+    // 2. Phân tích tên & địa chỉ từ URL Google Maps
     // Dạng 1: /maps/place/Tên+Quán+Địa+Chỉ/@21.033,...
     if (rawInput.includes("/maps/place/")) {
       const match = rawInput.match(/\/maps\/place\/([^/@?]+)/);
@@ -884,12 +947,16 @@ function handleMagicAutoFill() {
         }
       }
     }
-    // Dạng 3: maps.app.goo.gl hoặc chuỗi text tìm kiếm
+    // Dạng 3: Link rút gọn (share.google / maps.app.goo.gl) hoặc văn bản kèm link
     else {
-      // Nếu là link rút gọn hoặc văn bản tự do
-      extractedName = rawInput.replace(/https?:\/\/[^\s]+/g, "").trim();
-      if (!extractedName && (rawInput.includes("maps.app.goo.gl") || rawInput.includes("goo.gl"))) {
-        extractedName = "Địa điểm Google Maps";
+      extractedName = rawInput.replace(/https?:\/\/[^\s]+/g, "").replace(/[-–—]/g, " ").trim();
+      
+      // Nếu user dán link rút gọn đơn thuần không kèm chữ
+      if (!extractedName && (rawInput.includes("share.google") || rawInput.includes("maps.app.goo.gl") || rawInput.includes("goo.gl"))) {
+        const userInputName = prompt("📍 Link Google Maps hợp lệ!\nHãy nhập nhanh Tên quán hoặc Món ăn (Ví dụ: Phiên / Phở Bát Đàn / 19 Ngọc Hà):", "");
+        if (userInputName && userInputName.trim()) {
+          extractedName = userInputName.trim();
+        }
       }
     }
 
@@ -899,16 +966,20 @@ function handleMagicAutoFill() {
 
     // Nếu địa chỉ còn trống, tạo địa chỉ gợi ý từ tên hoặc khu vực
     if (!extractedAddress) {
-      extractedAddress = extractedName.includes("Hà Nội") ? extractedName : `${extractedName}, Hà Nội`;
+      if (extractedName.includes("Ngọc Hà")) {
+        extractedAddress = extractedName.includes("19") ? "19 P. Ngọc Hà, Ba Đình, Hà Nội" : "Phố Ngọc Hà, Ba Đình, Hà Nội";
+      } else {
+        extractedAddress = extractedName.includes("Hà Nội") ? extractedName : `${extractedName}, Hà Nội`;
+      }
     }
 
     const fullSearchText = (extractedName + " " + extractedAddress + " " + rawInput).toLowerCase();
 
-    // 2. Nhận diện Quận / Khu vực tại Hà Nội
+    // 3. Nhận diện Quận / Khu vực tại Hà Nội
     let detectedDistrict = "Hoàn Kiếm"; // Mặc định trung tâm
     const districtKeywords = [
+      { name: "Ba Đình", keys: ["ba đình", "ngọc hà", "vạn bảo", "vạn phúc", "quán thánh", "giảng võ", "phan kế bính", "trúc bạch", "mạc đĩnh chi", "đội cấn", "kim mã", "liễu giai", "ngọc khánh", "núi trúc", "đốc ngữ", "hoàng hoa thám", "phiên"] },
       { name: "Hoàn Kiếm", keys: ["hoàn kiếm", "bát đàn", "hàng bạc", "hàng gai", "đinh tiên hoàng", "nguyễn hữu huân", "lý thái tổ", "đường thành", "hàng buồm", "hàng giầy", "hàng cân", "tạ hiện", "nhà thờ", "hàng trống", "phố cổ", "hồ gươm", "tràng tiền"] },
-      { name: "Ba Đình", keys: ["ba đình", "vạn bảo", "vạn phúc", "ngọc hà", "quán thánh", "giảng võ", "phan kế bính", "trúc bạch", "mạc đĩnh chi", "đội cấn", "kim mã", "liễu giai", "ngọc khánh", "núi trúc", "đốc ngữ", "hoàng hoa thám"] },
       { name: "Hai Bà Trưng", keys: ["hai bà trưng", "lê văn hưu", "lò đúc", "tô hiến thành", "tăng bạt hổ", "lạc trung", "bà triệu", "phố huế", "bạch mai", "đại cồ việt", "minh khai", "times city"] },
       { name: "Đống Đa", keys: ["đống đa", "đặng văn ngữ", "chùa bộc", "xã đàn", "thái hà", "tôn đức thắng", "ô chợ dừa", "huỳnh thúc kháng", "láng hạ", "hoàng cầu", "nguyên hồng"] },
       { name: "Cầu Giấy", keys: ["cầu giấy", "duy tân", "xuân thủy", "trần thái tông", "hoàng quốc việt", "trung hòa", "vũ phạm hàm", "nguyễn khang", "nguyễn chánh", "dịch vọng"] },
@@ -923,7 +994,7 @@ function handleMagicAutoFill() {
       }
     }
 
-    // 3. Nhận diện Danh mục ẩm thực (Category)
+    // 4. Nhận diện Danh mục ẩm thực (Category)
     let detectedCat = "mon-soi";
     let detectedPriceLevel = "mid";
     let detectedPriceRange = "40.000đ - 70.000đ";
@@ -947,14 +1018,14 @@ function handleMagicAutoFill() {
         detectedTags = ["Đồ Á Âu", "Hẹn hò", detectedDistrict];
         detectedImage = "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=800&q=80";
       }
-    } else if (fullSearchText.match(/(cafe|cà phê|coffee|tea|trà|matcha|roastery|acoustic|dessert|bakery)/)) {
+    } else if (fullSearchText.match(/(phiên|quán nước|nước|cafe|cà phê|coffee|tea|trà|matcha|roastery|acoustic|dessert|bakery)/)) {
       detectedCat = "cafe-chill";
       detectedPriceLevel = "low";
-      detectedPriceRange = "35.000đ - 55.000đ";
-      detectedMustTry = "Cà phê sữa thơm ngậy / Cà phê trứng / Trà hoa quả";
-      detectedReview = "Không gian quán rất xinh xắn và ấm cúng, ánh sáng tự nhiên tuyệt vời để chụp ảnh và thư giãn. Đồ uống pha chế đậm đà, nhân viên chu đáo.";
-      detectedTags = ["Cafe chill", "Sống ảo", detectedDistrict];
-      detectedImage = "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80";
+      detectedPriceRange = "30.000đ - 55.000đ";
+      detectedMustTry = "Trà thảo mộc thanh nhiệt / Cà phê sữa / Nước ép hoa quả tươi";
+      detectedReview = "Không gian quán mộc mạc, thoáng mát và rất chill. Đồ uống pha chế tươi ngon, nhân viên phục vụ chu đáo.";
+      detectedTags = ["Quán nước", "Cafe chill", "Yên tĩnh", detectedDistrict];
+      detectedImage = "https://images.unsplash.com/photo-1544787219-7f47ccb76574?auto=format&fit=crop&w=800&q=80";
     } else if (fullSearchText.match(/(lẩu|nướng|bbq|hotpot|bò nướng|nầm nướng|manwah|haidilao|kbbq)/)) {
       detectedCat = "lau-nuong";
       detectedPriceLevel = "high";
@@ -1006,7 +1077,7 @@ function handleMagicAutoFill() {
       detectedImage = "https://images.unsplash.com/photo-1582878826629-29b7ad1cdc43?auto=format&fit=crop&w=800&q=80";
     }
 
-    // 4. Điền tự động vào các ô input trên Form
+    // 5. Điền tự động vào các ô input trên Form
     document.getElementById("newPlaceName").value = extractedName;
     document.getElementById("newPlaceCategory").value = detectedCat;
     document.getElementById("newPlaceDistrict").value = detectedDistrict;

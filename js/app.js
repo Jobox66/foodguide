@@ -846,6 +846,21 @@ function openAddPlaceModal() {
 
 // Danh mục dữ liệu nhận diện nhanh 0ms cho các link rút gọn Google Maps đã xác thực
 const KNOWN_MAPS_SHORTLINKS = {
+  "a1vpshb65gp5szff7": {
+    name: "Cộng Cà Phê - Lạc Long Quân",
+    address: "677 Lạc Long Quân, Phú Thượng, Tây Hồ, Hà Nội",
+    district: "Tây Hồ",
+    category: "cafe-chill",
+    priceRange: "1.000đ - 100.000đ",
+    priceLevel: "low",
+    rating: 4.5,
+    reviewCount: 228,
+    time: "07:00 - 23:30",
+    mustTry: "Cà phê cốt dừa béo ngậy / Bạc xỉu cốt dừa / Trà cam quế",
+    review: "Không gian thời bao cấp đặc trưng với khoảng sân vườn rộng rãi rợp bóng cây xanh ngay mặt phố Lạc Long Quân gần Hồ Tây. Thích hợp tụ tập bạn bè, làm việc hoặc ngắm phố xá.",
+    tags: ["Cộng Cà Phê", "Cốt dừa", "Lạc Long Quân", "Tây Hồ", "Sân vườn"],
+    image: "https://images.unsplash.com/photo-1507133750040-3a7f57a05f47?auto=format&fit=crop&w=800&q=80"
+  },
   "6tzvvfbjier63saq6": {
     name: "Hôm Nào Cà Phê",
     address: "Số 10, Ngõ 82 Nghĩa Tân, Cầu Giấy, Hà Nội",

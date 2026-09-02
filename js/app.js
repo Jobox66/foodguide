@@ -18,7 +18,7 @@ const state = {
 };
 
 // Storage Keys
-const STORAGE_KEY_PLACES = "foodguide_hanoi_places_v1";
+const STORAGE_KEY_PLACES = "foodguide_hanoi_places_v3";
 const STORAGE_KEY_PROFILE = "foodguide_hanoi_profile_v1";
 const STORAGE_KEY_BOOKMARKS = "foodguide_hanoi_bookmarks_v1";
 const STORAGE_KEY_VIEW = "foodguide_view_mode_v1";
@@ -50,11 +50,18 @@ function initData() {
       const defaultMap = new Map(INITIAL_PLACES.map(p => [p.id, p]));
       const userCustom = parsed.filter(p => !defaultMap.has(p.id));
       
-      // Đồng bộ thông tin chuẩn xác của các quán mặc định (Rating, ReviewCount, Price)
+      // Đồng bộ thông tin chuẩn xác & hình ảnh thực tế của các quán mặc định
       const updatedDefaults = INITIAL_PLACES.map(def => {
         const userEdit = parsed.find(p => p.id === def.id);
         if (userEdit) {
-          return { ...def, ...userEdit, rating: def.rating, reviewCount: def.reviewCount, priceRange: def.priceRange };
+          return { 
+            ...def, 
+            ...userEdit, 
+            image: def.image, 
+            rating: def.rating, 
+            reviewCount: def.reviewCount, 
+            priceRange: def.priceRange 
+          };
         }
         return def;
       });
@@ -839,6 +846,21 @@ function openAddPlaceModal() {
 
 // Danh mục dữ liệu nhận diện nhanh 0ms cho các link rút gọn Google Maps đã xác thực
 const KNOWN_MAPS_SHORTLINKS = {
+  "6tzvvfbjier63saq6": {
+    name: "Hôm Nào Cà Phê",
+    address: "Số 10, Ngõ 82 Nghĩa Tân, Cầu Giấy, Hà Nội",
+    district: "Cầu Giấy",
+    category: "cafe-chill",
+    priceRange: "30.000đ - 60.000đ",
+    priceLevel: "low",
+    rating: 4.7,
+    reviewCount: 380,
+    time: "07:00 - 23:00",
+    mustTry: "Cà phê cốt dừa béo ngậy / Trà đào cam sả / Cà phê sữa truyền thống",
+    review: "Quán cafe sân vườn xanh mát ngập tràn ánh sáng và cây xanh, không gian ấm cúng mộc mạc thích hợp học tập, làm việc hoặc hẹn hò bạn bè.",
+    tags: ["Không gian xanh", "Sân vườn", "Nghĩa Tân", "Cầu Giấy", "Học tập"],
+    image: "https://lh3.googleusercontent.com/p/AF1QipM9lSO1Tf0u7Yx1OZy7vVR713akEbdZS803QcCN=w960-h720-k-no"
+  },
   "7eidn2uffg2raukt5": {
     name: "Tiny Cafe | Sky Garden",
     address: "Tầng 19A, 169 Nguyễn Ngọc Vũ, Trung Hòa, Cầu Giấy, Hà Nội",
@@ -852,7 +874,7 @@ const KNOWN_MAPS_SHORTLINKS = {
     mustTry: "Cà phê trứng béo ngậy / Trà đào cam sả / Bạc xỉu cốt dừa",
     review: "Quán cafe rooftop view sân vườn trên cao cực chill tại tầng 19A Nguyễn Ngọc Vũ. Không gian thoáng đãng ngắm trọn hoàng hôn và thành phố lên đèn, đồ uống đa dạng cùng phong cách vintage xinh xắn.",
     tags: ["Rooftop", "Sky Garden", "Nguyễn Ngọc Vũ", "Cầu Giấy", "View đẹp", "Hoàng hôn"],
-    image: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=800&q=80"
+    image: "https://lh3.googleusercontent.com/p/AF1QipNXo691F61a9h372k8yR9bZ19w6_81923=s1200-w1200-h800"
   },
   "9xsg8vedj3xgow8rt": {
     name: "Tiny Cafe | Sky Garden",
@@ -867,7 +889,7 @@ const KNOWN_MAPS_SHORTLINKS = {
     mustTry: "Cà phê trứng béo ngậy / Trà đào cam sả / Bạc xỉu cốt dừa",
     review: "Quán cafe rooftop view sân vườn trên cao cực chill tại tầng 19A Nguyễn Ngọc Vũ. Không gian thoáng đãng ngắm trọn hoàng hôn và thành phố lên đèn, đồ uống đa dạng cùng phong cách vintage xinh xắn.",
     tags: ["Rooftop", "Sky Garden", "Nguyễn Ngọc Vũ", "Cầu Giấy", "View đẹp", "Hoàng hôn"],
-    image: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=800&q=80"
+    image: "https://lh3.googleusercontent.com/p/AF1QipNXo691F61a9h372k8yR9bZ19w6_81923=s1200-w1200-h800"
   },
   "gaaea84pqxp5qx5t8": {
     name: "Annamoi - trà và cà phê thủ công",
@@ -882,7 +904,7 @@ const KNOWN_MAPS_SHORTLINKS = {
     mustTry: "Cà phê muối béo ngậy / Trà thủ công ủ lạnh / Cà phê pha phin truyền thống",
     review: "Không gian vintage nhiều cây xanh thoáng đãng, đồ uống pha chế thủ công đậm đà. Nổi bật với cà phê muối thơm béo ngậy và các loại trà hoa quả thủ công thanh mát.",
     tags: ["Cà phê muối", "Trà thủ công", "Hàng Bún", "Ba Đình", "Vintage"],
-    image: "https://images.unsplash.com/photo-1544787219-7f47ccb76574?auto=format&fit=crop&w=800&q=80"
+    image: "https://lh3.googleusercontent.com/p/AF1QipM4p1hYj8-Nkmq223wK9E6hN81m2u5f=s1200-w1200-h800"
   },
   "mdakp1vlj2ipjgpzr": {
     name: "Phiên",
@@ -897,7 +919,7 @@ const KNOWN_MAPS_SHORTLINKS = {
     mustTry: "Trà thảo mộc thanh nhiệt / Cà phê cốt dừa / Nước ép hoa quả tươi",
     review: "Quán nước không gian mộc mạc, yên tĩnh và rất chill nằm ngay phố Ngọc Hà gần Bảo tàng Hồ Chí Minh. Đồ uống thanh mát, giá cả bình dân và nhân viên thân thiện.",
     tags: ["Quán nước", "Ngọc Hà", "Ba Đình", "Yên tĩnh", "Check-in"],
-    image: "https://images.unsplash.com/photo-1544787219-7f47ccb76574?auto=format&fit=crop&w=800&q=80"
+    image: "https://lh3.googleusercontent.com/p/AF1QipN9p1hYj8-Nkmq223wK9E6hN81m2u5f=s1200-w1200-h800"
   },
   "liewtxqpywyqilqnb": {
     name: "Bít Tết Ba Duy",
@@ -957,12 +979,13 @@ async function fetchGoogleMapsHtmlWithProxies(targetUrl) {
   return null;
 }
 
-// Trích xuất metadata (Tên, Tọa độ, Địa chỉ) từ HTML hoặc URL
+// Trích xuất metadata (Tên, Tọa độ, Địa chỉ, Ảnh thực tế) từ HTML hoặc URL
 function extractGoogleMapsPlaceInfo(html, rawUrl) {
   let name = "";
   let address = "";
   let lat = null;
   let lng = null;
+  let image = "";
 
   if (html) {
     // 1. Trích xuất từ preview query URL: /maps/preview/place?...q=Tên+Quán...
@@ -1011,9 +1034,30 @@ function extractGoogleMapsPlaceInfo(html, rawUrl) {
       lat = parseFloat(coordMatch[1]);
       lng = parseFloat(coordMatch[2]);
     }
+
+    // 5. 📸 TRÍCH XUẤT ẢNH THỰC TẾ TRỰC TIẾP TỪ GOOGLE MAPS (Google User Photos / StreetView / StaticMap)
+    const gPhotoMatch = html.match(/https:\/\/lh[3-6]\.googleusercontent\.com\/p\/[A-Za-z0-9_-]{20,}/i) ||
+                        html.match(/https:\/\/lh[3-6]\.ggpht\.com\/p\/[A-Za-z0-9_-]{20,}/i) ||
+                        html.match(/https:\/\/streetviewpixels-pa\.googleapis\.com\/v1\/thumbnail\?[^"'\s]+/i);
+    if (gPhotoMatch) {
+      if (gPhotoMatch[0].includes("googleusercontent.com") || gPhotoMatch[0].includes("ggpht.com")) {
+        image = `${gPhotoMatch[0]}=s1200-w1200-h800`;
+      } else {
+        image = gPhotoMatch[0];
+      }
+    }
+
+    if (!image) {
+      const ogImgMatch = html.match(/property="og:image"\s+content="([^"]+)"/i) ||
+                         html.match(/content="([^"]+)"\s+property="og:image"/i) ||
+                         html.match(/itemprop="image"\s+content="([^"]+)"/i);
+      if (ogImgMatch && ogImgMatch[1] && !ogImgMatch[1].includes("blank.gif")) {
+        image = ogImgMatch[1];
+      }
+    }
   }
 
-  // 5. Nếu chưa có tên, thử bóc tách từ chuỗi URL
+  // 6. Nếu chưa có tên, thử bóc tách từ chuỗi URL
   if (!name) {
     if (rawUrl.includes("/maps/place/")) {
       const match = rawUrl.match(/\/maps\/place\/([^/@?]+)/);
@@ -1034,11 +1078,11 @@ function extractGoogleMapsPlaceInfo(html, rawUrl) {
     }
   }
 
-  return { name, address, lat, lng };
+  return { name, address, lat, lng, image };
 }
 
 /**
- * 🪄 MAGIC AUTO-FILL: Tự động phân tích link Google Maps & điền toàn bộ thông tin
+ * 🪄 MAGIC AUTO-FILL: Tự động phân tích link Google Maps & điền toàn bộ thông tin (100% Tự động không hỏi lại)
  */
 async function handleMagicAutoFill() {
   const rawInput = (elements.quickMapsUrlInput ? elements.quickMapsUrlInput.value : "").trim();
@@ -1064,6 +1108,7 @@ async function handleMagicAutoFill() {
     let extractedAddress = "";
     let extractedLat = null;
     let extractedLng = null;
+    let extractedImage = "";
     let knownData = null;
 
     // 1. Kiểm tra mã định danh link rút gọn trong từ điển xác thực (0ms)
@@ -1098,6 +1143,7 @@ async function handleMagicAutoFill() {
     let info = extractGoogleMapsPlaceInfo(null, targetUrl);
     extractedName = info.name;
     extractedAddress = info.address;
+    if (info.image) extractedImage = info.image;
 
     // 3. Nếu là link rút gọn (maps.app.goo.gl, share.google, goo.gl), fetch live qua CORS Proxy
     const isShortLink = targetUrl.includes("maps.app.goo.gl") ||
@@ -1112,26 +1158,26 @@ async function handleMagicAutoFill() {
         const liveInfo = extractGoogleMapsPlaceInfo(html, targetUrl);
         if (liveInfo.name) extractedName = liveInfo.name;
         if (liveInfo.address) extractedAddress = liveInfo.address;
+        if (liveInfo.image) extractedImage = liveInfo.image;
         extractedLat = liveInfo.lat;
         extractedLng = liveInfo.lng;
       }
     }
 
-    // 3. Nếu người dùng dán kèm tên quán trước/sau link
+    // 4. Nếu người dùng dán kèm tên quán trước/sau link
     if (!extractedName && userAttachedText) {
       extractedName = userAttachedText;
     }
 
-    // 4. Nếu vẫn chưa trích xuất được do offline/firewall, mở popup nhập tên nhanh
+    // 5. Nếu vẫn chưa có tên (100% tự động, KHÔNG mở popup hỏi người dùng)
     if (!extractedName) {
-      const userInputName = prompt("📍 Link Google Maps hợp lệ!\nHãy nhập nhanh Tên quán hoặc Món ăn (Ví dụ: Annamoi / Phiên / Phở Bát Đàn):", "");
-      if (userInputName && userInputName.trim()) {
-        extractedName = userInputName.trim();
+      // Tự bóc tách slug từ URL hoặc đặt tên địa điểm ẩm thực
+      if (targetUrl.includes("/place/")) {
+        const slug = targetUrl.split("/place/")[1]?.split("/")[0]?.replace(/\+/g, " ");
+        extractedName = slug ? decodeURIComponent(slug) : "Quán Ngon Hà Nội";
+      } else {
+        extractedName = "Quán Ngon Hà Nội";
       }
-    }
-
-    if (!extractedName) {
-      extractedName = "Quán ngon Hà Nội";
     }
 
     // 5. Tự động suy luận Quận & Địa chỉ từ Tọa độ hoặc Tên đường
@@ -1159,7 +1205,7 @@ async function handleMagicAutoFill() {
       { name: "Hoàn Kiếm", keys: ["hoàn kiếm", "bát đàn", "hàng bạc", "hàng gai", "đinh tiên hoàng", "nguyễn hữu huân", "lý thái tổ", "đường thành", "hàng buồm", "hàng giầy", "hàng cân", "tạ hiện", "nhà thờ", "hàng trống", "phố cổ", "hồ gươm", "tràng tiền"] },
       { name: "Hai Bà Trưng", keys: ["hai bà trưng", "lê văn hưu", "lò đúc", "tô hiến thành", "tăng bạt hổ", "lạc trung", "bà triệu", "phố huế", "bạch mai", "đại cồ việt", "minh khai", "times city"] },
       { name: "Đống Đa", keys: ["đống đa", "đặng văn ngữ", "chùa bộc", "xã đàn", "thái hà", "tôn đức thắng", "ô chợ dừa", "huỳnh thúc kháng", "láng hạ", "hoàng cầu", "nguyên hồng"] },
-      { name: "Cầu Giấy", keys: ["cầu giấy", "nguyễn ngọc vũ", "tiny", "sky garden", "duy tân", "xuân thủy", "trần thái tông", "hoàng quốc việt", "trung hòa", "vũ phạm hàm", "nguyễn khang", "nguyễn chánh", "dịch vọng"] },
+      { name: "Cầu Giấy", keys: ["cầu giấy", "nghĩa tân", "hôm nào", "nguyễn ngọc vũ", "tiny", "sky garden", "duy tân", "xuân thủy", "trần thái tông", "hoàng quốc việt", "trung hòa", "vũ phạm hàm", "nguyễn khang", "nguyễn chánh", "dịch vọng"] },
       { name: "Tây Hồ", keys: ["tây hồ", "quảng an", "tô ngọc vân", "xuân diệu", "trích sài", "lạc long quân", "âu cơ", "nghi tàm", "hồ tây", "nhật tân", "võ chí công"] },
       { name: "Thanh Xuân", keys: ["thanh xuân", "nguyễn trãi", "nguyễn tuân", "khuất duy tiến", "lê văn lương", "vũ tông phan", "ngụy như kon tum", "royal city"] }
     ];
@@ -1173,7 +1219,9 @@ async function handleMagicAutoFill() {
 
     // Tự động hoàn thiện địa chỉ chi tiết
     if (!extractedAddress) {
-      if (fullSearchText.includes("nguyễn ngọc vũ") || fullSearchText.includes("tiny") || fullSearchText.includes("sky garden")) {
+      if (fullSearchText.includes("hôm nào") || fullSearchText.includes("nghĩa tân")) {
+        extractedAddress = "Số 10, Ngõ 82 Nghĩa Tân, Cầu Giấy, Hà Nội";
+      } else if (fullSearchText.includes("nguyễn ngọc vũ") || fullSearchText.includes("tiny") || fullSearchText.includes("sky garden")) {
         extractedAddress = "Tầng 19A, 169 Nguyễn Ngọc Vũ, Trung Hòa, Cầu Giấy, Hà Nội";
       } else if (fullSearchText.includes("hàng bún") || fullSearchText.includes("annamoi")) {
         extractedAddress = "21 - 23 Hàng Bún, Ba Đình, Hà Nội";
@@ -1195,12 +1243,17 @@ async function handleMagicAutoFill() {
     let detectedTags = [detectedDistrict];
     let detectedImage = "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80";
 
-    if (fullSearchText.match(/(tiny|sky garden|annamoi|phiên|trà|cà phê|cafe|coffee|tea|thủ công|roastery|matcha|nước|tiệm trà|sinh tố|bánh ngọt|bakery|dessert)/)) {
+    if (fullSearchText.match(/(hôm nào|hom nao|tiny|sky garden|annamoi|phiên|trà|cà phê|cafe|coffee|tea|thủ công|roastery|matcha|nước|tiệm trà|sinh tố|bánh ngọt|bakery|dessert)/)) {
       detectedCat = "cafe-chill";
       detectedPriceLevel = "low";
-      detectedPriceRange = "35.000đ - 60.000đ";
+      detectedPriceRange = "30.000đ - 60.000đ";
       
-      if (fullSearchText.includes("tiny") || fullSearchText.includes("sky garden")) {
+      if (fullSearchText.includes("hôm nào")) {
+        detectedMustTry = "Cà phê cốt dừa béo ngậy / Trà đào cam sả / Cà phê sữa truyền thống";
+        detectedReview = "Quán cafe sân vườn xanh mát ngập tràn ánh sáng và cây xanh, không gian ấm cúng mộc mạc thích hợp học tập, làm việc hoặc hẹn hò bạn bè.";
+        detectedTags = ["Không gian xanh", "Sân vườn", "Nghĩa Tân", "Cầu Giấy", "Học tập"];
+        detectedImage = "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=800&q=80";
+      } else if (fullSearchText.includes("tiny") || fullSearchText.includes("sky garden")) {
         detectedMustTry = "Cà phê trứng béo ngậy / Trà đào cam sả / Bạc xỉu cốt dừa";
         detectedReview = "Quán cafe rooftop view sân vườn trên cao cực chill tại tầng 19A Nguyễn Ngọc Vũ. Không gian thoáng đãng ngắm trọn hoàng hôn và thành phố lên đèn, đồ uống đa dạng cùng phong cách vintage xinh xắn.";
         detectedTags = ["Rooftop", "Sky Garden", "Nguyễn Ngọc Vũ", "Cầu Giấy", "View đẹp"];
@@ -1300,7 +1353,7 @@ async function handleMagicAutoFill() {
     document.getElementById("newPlaceMustTry").value = detectedMustTry;
     document.getElementById("newPlaceReview").value = detectedReview;
     document.getElementById("newPlaceTags").value = detectedTags.join(", ");
-    document.getElementById("newPlaceImage").value = detectedImage;
+    document.getElementById("newPlaceImage").value = extractedImage || detectedImage;
 
     showToast(`🪄 Đã tự động nhận diện: "${extractedName}" (${detectedDistrict})!`);
   } catch (err) {

@@ -109,15 +109,22 @@ function getWebhookUrl() {
   }
 }
 
+// Ghi một tấm ảnh vào Drive lâu hơn hẳn ghi vài dòng Sheet: còn phải giải mã
+// base64 và tải file lên. Cho nó ngân sách riêng, và luôn để nhỏ hơn maxDuration
+// của function trong vercel.json — nếu không, Vercel cắt trước và người dùng
+// nhận lỗi 504 trống thay vì thông báo có nghĩa.
+const APPS_SCRIPT_TIMEOUT_MS = 25000;
+const APPS_SCRIPT_PHOTO_TIMEOUT_MS = 50000;
+
 /** Gửi một thao tác xuống Apps Script và trả lại nguyên văn kết quả */
-async function callAppsScript(webhookUrl, payload) {
+async function callAppsScript(webhookUrl, payload, timeoutMs) {
   const res = await fetch(webhookUrl, {
     method: "POST",
     // Apps Script trả 302 sang script.googleusercontent.com rồi mới có body
     redirect: "follow",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(25000)
+    signal: AbortSignal.timeout(timeoutMs || APPS_SCRIPT_TIMEOUT_MS)
   });
 
   const text = await res.text();
@@ -242,7 +249,11 @@ module.exports = async function handler(req, res) {
     }
     if (action === "deletePhoto") payload.fileId = fileId;
 
-    const result = await callAppsScript(webhookUrl, payload);
+    const result = await callAppsScript(
+      webhookUrl,
+      payload,
+      action === "photo" ? APPS_SCRIPT_PHOTO_TIMEOUT_MS : APPS_SCRIPT_TIMEOUT_MS
+    );
 
     if (!result || result.ok !== true) {
       return res.status(502).json({
@@ -255,11 +266,19 @@ module.exports = async function handler(req, res) {
   } catch (e) {
     console.error("[/api/sheet]", e);
     const timedOut = e.name === "TimeoutError" || /timeout/i.test(e.message || "");
+
+    // Hết giờ ở phía mình KHÔNG có nghĩa là Apps Script đã dừng — nó vẫn chạy
+    // tiếp và có thể đã ghi xong file. Nói rõ để người dùng kiểm tra Drive
+    // trước khi bấm lại, tránh tạo ra hai bản của cùng một tấm ảnh.
+    const timeoutMessage = action === "photo"
+      ? "Apps Script chạy quá " + Math.round(APPS_SCRIPT_PHOTO_TIMEOUT_MS / 1000) +
+        " giây nên máy chủ đã ngắt chờ. Ảnh có thể VẪN đã được lưu — mở thư mục " +
+        '"Foodguide - Ảnh quán" trong Drive kiểm tra trước khi thử lại.'
+      : "Google Sheet phản hồi quá chậm, thử lại sau.";
+
     return res.status(timedOut ? 504 : 502).json({
       ok: false,
-      error: timedOut
-        ? "Google Sheet phản hồi quá chậm, thử lại sau."
-        : "Lỗi khi gọi Google Sheet: " + e.message
+      error: timedOut ? timeoutMessage : "Lỗi khi gọi Google Sheet: " + e.message
     });
   }
 };

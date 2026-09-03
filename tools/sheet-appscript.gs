@@ -86,6 +86,9 @@ var COLUMNS = [
 
 var ID_COLUMN = 1; // cột A
 
+/** Những action có ghi/đọc Sheet — chỉ chúng mới cần xếp hàng qua khoá */
+var SHEET_ACTIONS = { health: true, pull: true, push: true, 'delete': true };
+
 /* ═══════════════════════════════════════════════════════════════════════════
    ĐIỂM VÀO
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -111,12 +114,18 @@ function doPost(e) {
     return jsonOut_({ ok: false, error: 'Sai token — SHEETS_TOKEN trên Vercel chưa trùng SHEET_TOKEN trong Apps Script.' });
   }
 
-  // Khoá để hai lần đồng bộ chồng nhau không ghi đè lên nhau
-  var lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(20000);
-  } catch (err) {
-    return jsonOut_({ ok: false, error: 'Sheet đang bận, thử lại sau vài giây.' });
+  // Khoá chỉ để hai lượt GHI SHEET không đè lên nhau. Thao tác ảnh chỉ đụng
+  // Drive, không chạm một ô nào của Sheet — bắt nó xếp hàng chờ tới 20 giây sau
+  // một lượt đồng bộ dài là vô ích, và đó chính là cách nhanh nhất để vượt quá
+  // thời gian chờ của máy chủ rồi báo "phản hồi quá chậm".
+  var lock = null;
+  if (SHEET_ACTIONS[body.action] === true) {
+    lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(20000);
+    } catch (err) {
+      return jsonOut_({ ok: false, error: 'Sheet đang bận, thử lại sau vài giây.' });
+    }
   }
 
   try {
@@ -132,7 +141,7 @@ function doPost(e) {
   } catch (err) {
     return jsonOut_({ ok: false, error: String((err && err.message) || err) });
   } finally {
-    lock.releaseLock();
+    if (lock) lock.releaseLock();
   }
 }
 
@@ -357,9 +366,29 @@ var PHOTO_MIME_EXT = {
   'image/webp': 'webp'
 };
 
+/**
+ * Thư mục ảnh, nhớ sẵn id để khỏi tìm lại.
+ * getFoldersByName() là một lượt tra toàn Drive — chạy nhanh khi Drive còn
+ * trống, nhưng chậm dần theo số file bạn có, và nó chạy ở MỌI lần tải ảnh.
+ * Nhớ id vào Script Properties thì từ lần thứ hai chỉ còn một lệnh mở thẳng.
+ */
 function getPhotoFolder_() {
+  var props = PropertiesService.getScriptProperties();
+  var cachedId = props.getProperty('PHOTO_FOLDER_ID');
+
+  if (cachedId) {
+    try {
+      var cached = DriveApp.getFolderById(cachedId);
+      if (!cached.isTrashed()) return cached;
+    } catch (err) {
+      // Thư mục bị xoá hoặc id hỏng — rơi xuống tìm lại bên dưới
+    }
+  }
+
   var found = DriveApp.getFoldersByName(PHOTO_FOLDER_NAME);
-  return found.hasNext() ? found.next() : DriveApp.createFolder(PHOTO_FOLDER_NAME);
+  var folder = found.hasNext() ? found.next() : DriveApp.createFolder(PHOTO_FOLDER_NAME);
+  props.setProperty('PHOTO_FOLDER_ID', folder.getId());
+  return folder;
 }
 
 /**
@@ -367,6 +396,12 @@ function getPhotoFolder_() {
  * trả về id để trang web dựng link /api/photo?id=…
  */
 function savePhoto_(body) {
+  // Đo từng chặng: khi tải ảnh chậm, đây là cách duy nhất biết thời gian đi
+  // đâu — giải mã, tìm thư mục, ghi file, hay đặt quyền.
+  var t0 = new Date().getTime();
+  var mark = function () { var now = new Date().getTime(); var d = now - t0; t0 = now; return d; };
+  var ms = {};
+
   var dataUrl = String(body.dataUrl || '');
   var match = dataUrl.match(/^data:(image\/[a-z+]+);base64,([A-Za-z0-9+/=\s]+)$/);
   if (!match) {
@@ -385,18 +420,29 @@ function savePhoto_(body) {
   } catch (err) {
     return { ok: false, error: 'Không giải mã được ảnh.' };
   }
+  ms.giaiMa = mark();
 
   // Tên file mang theo id quán để bạn mở Drive ra vẫn biết ảnh của quán nào
   var slug = String(body.placeId || 'quan').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) || 'quan';
   var name = slug + '-' + Date.now() + '.' + ext;
 
+  var folder;
+  try {
+    folder = getPhotoFolder_();
+  } catch (err) {
+    return { ok: false, error: 'Không mở được thư mục ảnh trên Drive: ' + err.message +
+      ' (thường là do chưa deploy lại script sau khi thêm phần ảnh)' };
+  }
+  ms.timThuMuc = mark();
+
   var file;
   try {
-    file = getPhotoFolder_().createFile(Utilities.newBlob(bytes, mime, name));
+    file = folder.createFile(Utilities.newBlob(bytes, mime, name));
   } catch (err) {
     return { ok: false, error: 'Không ghi được vào Drive: ' + err.message +
       ' (thường là do chưa deploy lại script sau khi thêm phần ảnh)' };
   }
+  ms.ghiFile = mark();
 
   // /api/photo đọc ảnh mà không mang theo token nào, nên file phải mở theo link.
   // Id của Drive dài và ngẫu nhiên nên không đoán được.
@@ -408,7 +454,10 @@ function savePhoto_(body) {
       ' (tài khoản công ty thường chặn chia sẻ ra ngoài — hãy dùng tài khoản Gmail cá nhân)' };
   }
 
-  return { ok: true, fileId: file.getId(), name: name, bytes: bytes.length };
+  ms.datQuyen = mark();
+  ms.tong = ms.giaiMa + ms.timThuMuc + ms.ghiFile + ms.datQuyen;
+
+  return { ok: true, fileId: file.getId(), name: name, bytes: bytes.length, ms: ms };
 }
 
 /** Xoá một ảnh khỏi Drive (đưa vào thùng rác, vẫn khôi phục được trong 30 ngày) */

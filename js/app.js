@@ -1841,8 +1841,13 @@ function updateSheetButton() {
    thì chậm, tốn dung lượng Drive, và vượt giới hạn body của máy chủ.
    =================================================================== */
 
-const PHOTO_MAX_DIM = 1400;                 // bề dài nhất sau khi thu nhỏ
-const PHOTO_MAX_PAYLOAD = 900 * 1024;       // trần cho chuỗi base64 gửi lên
+// Ảnh lớn nhất trang dùng tới là 1200px (ảnh hero trong modal chi tiết), nên
+// gửi lên hơn thế là phí — mà mỗi KB thừa đều là thời gian Apps Script phải
+// giải mã và tải lên Drive, tức là nguy cơ vượt thời gian chờ.
+const PHOTO_MAX_DIM = 1200;
+const PHOTO_MAX_PAYLOAD = 700 * 1024;       // trần cho chuỗi base64 gửi lên
+const PHOTO_START_QUALITY = 0.78;
+const PHOTO_MIN_QUALITY = 0.45;             // dưới mức này ảnh món ăn bắt đầu vỡ rõ
 const PHOTO_URL_PREFIX = "/api/photo?id=";
 
 /**
@@ -1897,9 +1902,12 @@ async function shrinkImageFile(file) {
   ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
   if (typeof source.close === "function") source.close();
 
-  let quality = 0.82;
+  let quality = PHOTO_START_QUALITY;
   let dataUrl = canvas.toDataURL("image/jpeg", quality);
-  while (dataUrl.length > PHOTO_MAX_PAYLOAD && quality > 0.4) {
+
+  // Kiểm tra mức TIẾP THEO trước khi hạ, nếu không vòng lặp sẽ tụt xuống dưới
+  // sàn đúng một bước — thà báo lỗi còn hơn lặng lẽ lưu một tấm ảnh vỡ nát.
+  while (dataUrl.length > PHOTO_MAX_PAYLOAD && quality - 0.12 >= PHOTO_MIN_QUALITY) {
     quality -= 0.12;
     dataUrl = canvas.toDataURL("image/jpeg", quality);
   }
@@ -1932,14 +1940,25 @@ function explainPhotoError(message) {
   if (/quá lớn|413/i.test(text)) {
     return "Ảnh quá nặng so với giới hạn máy chủ. Thử ảnh khác hoặc chụp lại ở độ phân giải thấp hơn.";
   }
+  if (/Sheet đang bận/i.test(text)) {
+    return "Apps Script đang bận vì một lượt đồng bộ khác. Đợi vài giây rồi thử lại.";
+  }
   return text;
 }
 
 /** Gửi ảnh lên Drive, trả về đường dẫn để lưu vào trường image */
 async function uploadPhotoDataUrl(placeId, dataUrl) {
-  const json = await callSheetApi({ action: "photo", placeId: placeId || "", dataUrl }, 90000);
+  const json = await callSheetApi({ action: "photo", placeId: placeId || "", dataUrl }, 70000);
   if (!json.fileId) throw new Error("Máy chủ không trả về id ảnh.");
-  return PHOTO_URL_PREFIX + encodeURIComponent(json.fileId);
+
+  // Apps Script gửi kèm thời gian từng chặng — ghi ra console để lần sau chậm
+  // thì biết ngay nghẽn ở đâu, khỏi phải đoán
+  if (json.ms) console.info("Tải ảnh (ms):", json.ms);
+
+  return {
+    url: PHOTO_URL_PREFIX + encodeURIComponent(json.fileId),
+    ms: json.ms || null
+  };
 }
 
 /** Ảnh này có phải ảnh mình tự tải lên không (để hiện nhãn trong form) */
@@ -2017,12 +2036,13 @@ function attachPhotoUploader(prefix, getPlaceId) {
 
     try {
       const dataUrl = await shrinkImageFile(file);
-      const url = await uploadPhotoDataUrl(getPlaceId ? getPlaceId() : "", dataUrl);
+      const result = await uploadPhotoDataUrl(getPlaceId ? getPlaceId() : "", dataUrl);
 
-      urlInput.value = url;
+      urlInput.value = result.url;
       refreshPreview();
       const kb = Math.round((dataUrl.length * 3) / 4 / 1024);
-      setHint(`✅ Đã lưu vào Drive (${kb} KB). Nhớ bấm Lưu để ghi vào cẩm nang.`, "ok");
+      const secs = result.ms && result.ms.tong ? ` trong ${(result.ms.tong / 1000).toFixed(1)}s` : "";
+      setHint(`✅ Đã lưu vào Drive (${kb} KB${secs}). Nhớ bấm Lưu để ghi vào cẩm nang.`, "ok");
     } catch (e) {
       setHint("⚠️ Tải ảnh thất bại: " + explainPhotoError(e.message), "err");
     } finally {

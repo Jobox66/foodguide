@@ -441,9 +441,22 @@ function savePhoto_(body) {
   }
   ms.giaiMa = mark();
 
-  // Tên file mang theo id quán để bạn mở Drive ra vẫn biết ảnh của quán nào
-  var slug = String(body.placeId || 'quan').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) || 'quan';
-  var name = slug + '-' + Date.now() + '.' + ext;
+  // Tên file do TRÌNH DUYỆT đặt trước khi gửi, không phải do đây sinh ra.
+  //
+  // Vì sao quan trọng: Apps Script trả kết quả qua một địa chỉ tạm trên
+  // googleusercontent, và địa chỉ đó thỉnh thoảng trả 404 — ảnh đã ghi xong vào
+  // Drive rồi nhưng phía gọi không nhận được fileId. Nếu tên file do đây tự
+  // sinh (kèm Date.now()) thì mỗi lần thử lại tạo một bản mới, Drive đầy ảnh
+  // trùng mà vẫn không lấy được id.
+  //
+  // Để trình duyệt giữ nguyên một uploadId qua các lần thử thì lần sau chỉ cần
+  // tìm lại đúng file đó — thử lại bao nhiêu lần cũng chỉ có một tấm ảnh.
+  var uploadId = String(body.uploadId || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 80);
+  if (!uploadId) {
+    var slug = String(body.placeId || 'quan').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) || 'quan';
+    uploadId = slug + '-' + Date.now();
+  }
+  var name = uploadId + '.' + ext;
 
   var folder;
   try {
@@ -453,6 +466,16 @@ function savePhoto_(body) {
       ' (thường là do chưa deploy lại script sau khi thêm phần ảnh)' };
   }
   ms.timThuMuc = mark();
+
+  // Đã ghi ở lần thử trước rồi thì dùng lại, đừng tạo thêm bản nữa
+  var already = folder.getFilesByName(name);
+  if (already.hasNext()) {
+    var old = already.next();
+    ms.ghiFile = mark();
+    ms.datQuyen = 0;
+    ms.tong = ms.giaiMa + ms.timThuMuc + ms.ghiFile;
+    return { ok: true, fileId: old.getId(), name: name, bytes: bytes.length, reused: true, ms: ms };
+  }
 
   var file;
   try {

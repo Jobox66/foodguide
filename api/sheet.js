@@ -304,6 +304,9 @@ module.exports = async function handler(req, res) {
     if (action === "photo") {
       payload.dataUrl = dataUrl;
       payload.placeId = String(body.placeId || "").slice(0, 100);
+      // Khoá idempotent: cùng uploadId gửi lại thì Apps Script dùng lại đúng
+      // file cũ thay vì tạo bản trùng — xem ghi chú trong savePhoto_
+      payload.uploadId = String(body.uploadId || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80);
     }
     if (action === "deletePhoto") payload.fileId = fileId;
 

@@ -1974,18 +1974,62 @@ function explainPhotoError(message) {
 }
 
 /** Gửi ảnh lên Drive, trả về đường dẫn để lưu vào trường image */
-async function uploadPhotoDataUrl(placeId, dataUrl) {
-  const json = await callSheetApi({ action: "photo", placeId: placeId || "", dataUrl }, 70000);
-  if (!json.fileId) throw new Error("Máy chủ không trả về id ảnh.");
+/** Khoá idempotent cho một lần chọn ảnh — giữ nguyên qua mọi lần thử lại */
+function makeUploadId(placeId) {
+  const slug = String(placeId || "quan").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40) || "quan";
+  const random = Math.random().toString(36).slice(2, 8);
+  return `${slug}-${Date.now()}-${random}`;
+}
 
-  // Apps Script gửi kèm thời gian từng chặng — ghi ra console để lần sau chậm
-  // thì biết ngay nghẽn ở đâu, khỏi phải đoán
-  if (json.ms) console.info("Tải ảnh (ms):", json.ms);
+/**
+ * Lỗi này có đáng thử lại không?
+ * Chỉ những lỗi mà việc ghi CÓ THỂ đã thành công hoặc chỉ là trục trặc đường
+ * truyền. Sai token, sai định dạng, thiếu quyền thì thử lại chỉ tốn thời gian.
+ */
+function isTransientUploadError(message) {
+  return /404|quá chậm|hết hiệu lực|chập chờn|fetch failed|network|timeout|aborted|502|503|504/i
+    .test(String(message || ""));
+}
 
-  return {
-    url: PHOTO_URL_PREFIX + encodeURIComponent(json.fileId),
-    ms: json.ms || null
-  };
+/**
+ * Gửi ảnh lên Drive, trả về đường dẫn để lưu vào trường image.
+ *
+ * Thử lại tối đa ba lần với CÙNG một uploadId. Apps Script hay ghi xong ảnh
+ * rồi mới hỏng ở bước trả kết quả (địa chỉ tạm trên googleusercontent trả 404),
+ * nên lần thử sau tìm thấy đúng file cũ và lấy được id — không sinh ảnh trùng.
+ */
+async function uploadPhotoDataUrl(placeId, dataUrl, onRetry) {
+  const uploadId = makeUploadId(placeId);
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const json = await callSheetApi(
+        { action: "photo", placeId: placeId || "", uploadId, dataUrl },
+        70000
+      );
+      if (!json.fileId) throw new Error("Máy chủ không trả về id ảnh.");
+
+      // Apps Script gửi kèm thời gian từng chặng — ghi ra console để lần sau
+      // chậm thì biết ngay nghẽn ở đâu, khỏi phải đoán
+      if (json.ms) console.info("Tải ảnh (ms):", json.ms, json.reused ? "(dùng lại file cũ)" : "");
+
+      return {
+        url: PHOTO_URL_PREFIX + encodeURIComponent(json.fileId),
+        ms: json.ms || null,
+        attempts: attempt,
+        reused: json.reused === true
+      };
+    } catch (e) {
+      lastError = e;
+      if (attempt === 3 || !isTransientUploadError(e.message)) break;
+
+      if (onRetry) onRetry(attempt, e.message);
+      await new Promise(resolve => setTimeout(resolve, attempt * 1500));
+    }
+  }
+
+  throw lastError || new Error("Tải ảnh thất bại.");
 }
 
 /** Ảnh này có phải ảnh mình tự tải lên không (để hiện nhãn trong form) */
@@ -2015,6 +2059,17 @@ function attachPhotoUploader(prefix, getPlaceId) {
   const hint = document.getElementById(prefix + "PhotoHint");
   const preview = document.getElementById(prefix + "PhotoPreview");
   if (!urlInput || !fileInput || !button) return;
+
+  // Ô này nhận cả đường dẫn tương đối (/api/photo?id=…) lẫn link tuyệt đối,
+  // mà type="url" của HTML coi đường dẫn tương đối là không hợp lệ rồi chặn
+  // luôn nút Lưu — ảnh đã lên Drive nhưng không sao ghi vào cẩm nang được.
+  //
+  // Ép ở đây thay vì chỉ sửa trong HTML: một bản index.html còn nằm trong cache
+  // trình duyệt vẫn được chữa ngay khi app.js chạy.
+  if (urlInput.type === "url") {
+    urlInput.type = "text";
+    urlInput.setAttribute("inputmode", "url");
+  }
 
   const setHint = (text, kind) => {
     if (!hint) return;
@@ -2063,13 +2118,18 @@ function attachPhotoUploader(prefix, getPlaceId) {
 
     try {
       const dataUrl = await shrinkImageFile(file);
-      const result = await uploadPhotoDataUrl(getPlaceId ? getPlaceId() : "", dataUrl);
+      const result = await uploadPhotoDataUrl(
+        getPlaceId ? getPlaceId() : "",
+        dataUrl,
+        attempt => setHint(`Google trả lỗi tạm, đang thử lại (lần ${attempt + 1}/3)…`, "")
+      );
 
       urlInput.value = result.url;
       refreshPreview();
       const kb = Math.round((dataUrl.length * 3) / 4 / 1024);
       const secs = result.ms && result.ms.tong ? ` trong ${(result.ms.tong / 1000).toFixed(1)}s` : "";
-      setHint(`✅ Đã lưu vào Drive (${kb} KB${secs}). Nhớ bấm Lưu để ghi vào cẩm nang.`, "ok");
+      const retried = result.attempts > 1 ? ` — phải thử ${result.attempts} lần` : "";
+      setHint(`✅ Đã lưu vào Drive (${kb} KB${secs}${retried}). Nhớ bấm Lưu để ghi vào cẩm nang.`, "ok");
     } catch (e) {
       setHint("⚠️ Tải ảnh thất bại: " + explainPhotoError(e.message), "err");
     } finally {

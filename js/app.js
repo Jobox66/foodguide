@@ -16,6 +16,7 @@ const state = {
   sortBy: "featured",
   viewMode: "explorer", // 'explorer' (thẻ chi tiết) hoặc 'portal' (danh mục bio)
   deletedIds: new Set(),
+  backendStatus: { online: false, hasKey: false },
   theme: "light"
 };
 
@@ -106,6 +107,7 @@ function formatReviewCount(count) {
 const DATA_SOURCE_LABELS = {
   seed: "Dữ liệu dựng sẵn",
   google: "Google Places",
+  backend: "Máy chủ giải mã link",
   osm: "OpenStreetMap",
   known: "Danh sách đối chiếu",
   link: "Link Google Maps",
@@ -123,6 +125,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setupEventListeners();
   updateCategoryCounts();
   renderAll();
+  refreshBackendStatus(); // chạy nền, không chặn lần render đầu
 });
 
 /**
@@ -155,7 +158,8 @@ function initData() {
 
   state.places = merged.map(normalizePlace);
   state.profile = { ...DEFAULT_PROFILE, ...safeParse(localStorage.getItem(STORAGE_KEY_PROFILE), {}) };
-  state.settings = { googleApiKey: "", ...safeParse(localStorage.getItem(STORAGE_KEY_SETTINGS), {}) };
+  state.settings = { apiBaseUrl: "", ...safeParse(localStorage.getItem(STORAGE_KEY_SETTINGS), {}) };
+  delete state.settings.googleApiKey; // khoá không còn được lưu phía trình duyệt
   state.viewMode = localStorage.getItem(STORAGE_KEY_VIEW) || "explorer";
 }
 
@@ -215,12 +219,11 @@ function cacheDOMElements() {
   // Cài đặt nguồn dữ liệu
   elements.btnOpenSettings = document.getElementById("btnOpenSettings");
   elements.settingsModal = document.getElementById("settingsModal");
-  elements.settingsApiKey = document.getElementById("settingsApiKey");
+  elements.settingsApiBase = document.getElementById("settingsApiBase");
   elements.btnSaveSettings = document.getElementById("btnSaveSettings");
-  elements.btnTestApiKey = document.getElementById("btnTestApiKey");
-  elements.btnClearApiKey = document.getElementById("btnClearApiKey");
-  elements.btnToggleKeyVisible = document.getElementById("btnToggleKeyVisible");
+  elements.btnTestBackend = document.getElementById("btnTestBackend");
   elements.settingsTestResult = document.getElementById("settingsTestResult");
+  elements.backendStatusBox = document.getElementById("backendStatusBox");
   elements.magicKeyHint = document.getElementById("magicKeyHint");
 
   // Magic Auto-fill
@@ -477,17 +480,8 @@ function setupEventListeners() {
   if (elements.btnSaveSettings) {
     elements.btnSaveSettings.addEventListener("click", saveSettings);
   }
-  if (elements.btnTestApiKey) {
-    elements.btnTestApiKey.addEventListener("click", testApiKey);
-  }
-  if (elements.btnClearApiKey) {
-    elements.btnClearApiKey.addEventListener("click", clearApiKey);
-  }
-  if (elements.btnToggleKeyVisible) {
-    elements.btnToggleKeyVisible.addEventListener("click", () => {
-      const input = elements.settingsApiKey;
-      input.type = input.type === "password" ? "text" : "password";
-    });
+  if (elements.btnTestBackend) {
+    elements.btnTestBackend.addEventListener("click", testBackend);
   }
 
   // Đóng modal khi click ra ngoài hoặc nút close
@@ -1056,8 +1050,20 @@ function openAddPlaceModal() {
 /** Ẩn/hiện gợi ý thêm khoá API tuỳ theo đã cấu hình hay chưa */
 function updateMagicKeyHint() {
   if (!elements.magicKeyHint) return;
-  const hasKey = Boolean((state.settings.googleApiKey || "").trim());
-  elements.magicKeyHint.style.display = hasKey ? "none" : "";
+
+  const { online, hasKey } = state.backendStatus;
+  if (hasKey) {
+    elements.magicKeyHint.style.display = "none";
+    return;
+  }
+
+  elements.magicKeyHint.style.display = "";
+  elements.magicKeyHint.innerHTML = online
+    ? `🔑 Máy chủ chưa cấu hình khoá Google Places — hiện chỉ lấy được tên &amp; địa chỉ.
+       <a href="javascript:void(0)" onclick="openSettingsModal()">Xem cách cấu hình</a>
+       để lấy thêm số sao, lượt đánh giá, giờ mở cửa và ảnh thật.`
+    : `🔌 Chưa kết nối được máy chủ — link rút gọn có thể không đọc được.
+       <a href="javascript:void(0)" onclick="openSettingsModal()">Kiểm tra cài đặt</a>.`;
 }
 
 // Danh mục dữ liệu nhận diện nhanh 0ms cho các link rút gọn Google Maps đã xác thực
@@ -1393,99 +1399,47 @@ function guessCategory(text, googleTypes) {
   return "";
 }
 
-const GOOGLE_PRICE_LEVEL_MAP = {
-  PRICE_LEVEL_FREE: "low",
-  PRICE_LEVEL_INEXPENSIVE: "low",
-  PRICE_LEVEL_MODERATE: "mid",
-  PRICE_LEVEL_EXPENSIVE: "high",
-  PRICE_LEVEL_VERY_EXPENSIVE: "high"
-};
+/* ===================================================================
+   GỌI MÁY CHỦ RIÊNG (/api/place)
 
-/** Gọi Google Places API (New). Endpoint này cho phép gọi thẳng từ trình duyệt. */
-async function fetchGooglePlace(apiKey, { textQuery, lat, lng }) {
-  const body = { textQuery, languageCode: "vi", regionCode: "VN", maxResultCount: 1 };
-  if (lat !== null && lng !== null) {
-    body.locationBias = { circle: { center: { latitude: lat, longitude: lng }, radius: 300 } };
-  }
+   Khoá Google Places nằm trong biến môi trường của máy chủ, không bao
+   giờ có mặt trong mã nguồn phía trình duyệt. Máy chủ cũng là thứ duy
+   nhất đi theo được redirect của link rút gọn maps.app.goo.gl — trình
+   duyệt bị CORS chặn nên không tự làm được.
+   =================================================================== */
 
-  const fieldMask = [
-    "places.id", "places.displayName", "places.formattedAddress",
-    "places.location", "places.rating", "places.userRatingCount", "places.priceLevel",
-    "places.regularOpeningHours.weekdayDescriptions", "places.types",
-    "places.photos", "places.googleMapsUri"
-  ].join(",");
+const DEFAULT_API_ENDPOINT = "/api/place";
 
-  const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask": fieldMask
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(15000)
-  });
+function getApiEndpoint() {
+  const custom = (state.settings.apiBaseUrl || "").trim();
+  return custom || DEFAULT_API_ENDPOINT;
+}
 
+/** Hỏi máy chủ xem có sống không và đã cấu hình khoá chưa */
+async function checkBackendHealth() {
+  const endpoint = getApiEndpoint();
+  const separator = endpoint.includes("?") ? "&" : "?";
+
+  const res = await fetch(`${endpoint}${separator}health=1`, { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error(`máy chủ trả về ${res.status}`);
+
+  const json = await res.json();
+  return { online: true, hasKey: Boolean(json.hasKey) };
+}
+
+/** Nhờ máy chủ giải mã link và tra Google Places */
+async function fetchPlaceFromBackend(mapsUrl, hint) {
+  const endpoint = getApiEndpoint();
+  const separator = endpoint.includes("?") ? "&" : "?";
+  const query = `url=${encodeURIComponent(mapsUrl)}` + (hint ? `&hint=${encodeURIComponent(hint)}` : "");
+
+  const res = await fetch(`${endpoint}${separator}${query}`, { signal: AbortSignal.timeout(25000) });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error((json.error && json.error.message) || `Places API lỗi ${res.status}`);
-  }
-  return (json.places && json.places[0]) || null;
-}
 
-/**
- * Lấy link ảnh trực tiếp (lh3.googleusercontent.com) thay vì link có kèm khoá API.
- * skipHttpRedirect=true khiến Google trả JSON chứa photoUri, nhờ vậy khoá API
- * không bị nhúng vào dữ liệu lưu và file xuất ra.
- */
-async function fetchGooglePhotoUri(apiKey, photoName) {
-  const url = `https://places.googleapis.com/v1/${photoName}/media` +
-              `?maxHeightPx=800&maxWidthPx=1200&skipHttpRedirect=true&key=${encodeURIComponent(apiKey)}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
-  if (!res.ok) return "";
-  const json = await res.json().catch(() => ({}));
-  return json.photoUri || "";
-}
-
-/** Lấy khung giờ mở cửa của hôm nay từ weekdayDescriptions */
-function extractTodayOpeningHours(weekdayDescriptions) {
-  if (!Array.isArray(weekdayDescriptions) || weekdayDescriptions.length === 0) return "";
-  // Google xếp mảng bắt đầu từ Thứ Hai, còn getDay() coi 0 là Chủ Nhật
-  const index = (new Date().getDay() + 6) % 7;
-  const line = weekdayDescriptions[index] || weekdayDescriptions[0];
-  const range = line.match(/(\d{1,2}:\d{2})\s*[\u2013\u2014-]\s*(\d{1,2}:\d{2})/);
-  return range ? `${range[1]} - ${range[2]}` : "";
-}
-
-/** Đổ dữ liệu Google Places vào kết quả quét */
-async function applyGooglePlaceData(found, place, apiKey) {
-  if (place.displayName && place.displayName.text) found.name = place.displayName.text;
-  if (place.formattedAddress) found.address = place.formattedAddress;
-  if (place.location) {
-    found.lat = place.location.latitude;
-    found.lng = place.location.longitude;
+  if (!res.ok || !json.ok) {
+    throw new Error(json.error || `máy chủ trả về ${res.status}`);
   }
-  if (typeof place.rating === "number") found.rating = place.rating;
-  if (typeof place.userRatingCount === "number") found.reviewCount = place.userRatingCount;
-  if (place.priceLevel && GOOGLE_PRICE_LEVEL_MAP[place.priceLevel]) {
-    found.priceLevel = GOOGLE_PRICE_LEVEL_MAP[place.priceLevel];
-  }
-  if (place.regularOpeningHours) {
-    found.time = extractTodayOpeningHours(place.regularOpeningHours.weekdayDescriptions);
-  }
-  if (place.googleMapsUri) found.mapsUrl = place.googleMapsUri;
-
-  const category = guessCategory(found.name, place.types);
-  if (category) found.category = category;
-
-  if (place.photos && place.photos.length > 0) {
-    try {
-      const photoUri = await fetchGooglePhotoUri(apiKey, place.photos[0].name);
-      if (photoUri) found.image = photoUri;
-    } catch (e) {
-      console.warn("Không tải được ảnh Google Places:", e.message);
-    }
-  }
+  return json;
 }
 
 /** Trạng thái bận của nút Quét & Tự điền */
@@ -1561,37 +1515,53 @@ async function handleMagicAutoFill() {
     // 2. Bóc thẳng từ URL (không cần mạng)
     if (targetUrl) mergeFound(found, parseMapsUrl(targetUrl));
 
-    // 3. Link rút gọn -> thử giải mã qua proxy
-    if (targetUrl && !found.name && isShortMapsLink(targetUrl)) {
-      setAutofillBusy("⏳ Đang giải mã link rút gọn...");
+    // 3. Đoạn text dán kèm (nút Chia sẻ của app Google Maps kèm sẵn tên + địa chỉ)
+    if (pastedLines.length > 0) {
+      mergeFound(found, { name: pastedLines[0], address: pastedLines[1] || "" });
+    }
+
+    // 4. MÁY CHỦ RIÊNG — đường chính.
+    //    Chỉ máy chủ mới đi theo được redirect của link rút gọn, và cũng chỉ
+    //    máy chủ mới giữ khoá Google Places để lấy số sao / lượt đánh giá thật.
+    let backendUsed = false;
+    if (targetUrl) {
+      setAutofillBusy("⏳ Đang hỏi máy chủ...");
+      try {
+        const result = await fetchPlaceFromBackend(targetUrl, found.name);
+        const place = result.place || {};
+        backendUsed = true;
+
+        // Dữ liệu từ máy chủ là chuẩn nhất nên được ghi đè lên phỏng đoán phía client
+        if (place.name) found.name = place.name;
+        if (place.address) found.address = place.address;
+        if (place.lat !== null && place.lat !== undefined) found.lat = place.lat;
+        if (place.lng !== null && place.lng !== undefined) found.lng = place.lng;
+        if (place.rating !== null && place.rating !== undefined) found.rating = place.rating;
+        if (place.reviewCount !== null && place.reviewCount !== undefined) found.reviewCount = place.reviewCount;
+        if (place.priceLevel) found.priceLevel = place.priceLevel;
+        if (place.time) found.time = place.time;
+        if (place.image) found.image = place.image;
+        if (place.mapsUrl) found.mapsUrl = place.mapsUrl;
+
+        const category = guessCategory(found.name, place.types);
+        if (category) found.category = category;
+
+        found.source = result.source === "google" ? "google" : "backend";
+        (result.notes || []).forEach(n => notes.push(n));
+      } catch (e) {
+        notes.push("máy chủ: " + e.message);
+      }
+    }
+
+    // 5. Máy chủ không dùng được (mở bằng file:// hoặc chưa deploy)
+    //    -> thử nốt các CORS proxy công cộng. Hay hỏng, nên để cuối cùng.
+    if (!backendUsed && targetUrl && !found.name && isShortMapsLink(targetUrl)) {
+      setAutofillBusy("⏳ Đang thử giải mã link rút gọn...");
       const resolved = await resolveShortLink(targetUrl);
       if (resolved) {
         mergeFound(found, parseMapsUrl(resolved));
       } else {
         notes.push("không giải mã được link rút gọn");
-      }
-    }
-
-    // 4. Đoạn text dán kèm (nút Chia sẻ của app Google Maps kèm sẵn tên + địa chỉ)
-    if (pastedLines.length > 0) {
-      mergeFound(found, { name: pastedLines[0], address: pastedLines[1] || "" });
-    }
-
-    // 5. Google Places API - nguồn duy nhất có số sao & lượt đánh giá thật
-    const apiKey = (state.settings.googleApiKey || "").trim();
-    if (apiKey && (found.name || found.lat !== null)) {
-      setAutofillBusy("⏳ Đang hỏi Google Places...");
-      try {
-        const query = found.name || `${found.lat},${found.lng}`;
-        const place = await fetchGooglePlace(apiKey, { textQuery: query, lat: found.lat, lng: found.lng });
-        if (place) {
-          await applyGooglePlaceData(found, place, apiKey);
-          found.source = "google";
-        } else {
-          notes.push("Google Places không tìm thấy quán này");
-        }
-      } catch (e) {
-        notes.push("Places API: " + e.message);
       }
     }
 
@@ -1616,7 +1586,9 @@ async function handleMagicAutoFill() {
     if (!found.source) found.source = targetUrl ? "link" : "manual";
 
     if (!found.name && !found.address) {
-      showToast("⚠️ Không đọc được thông tin từ link này. Hãy mở link rồi copy URL đầy đủ trên thanh địa chỉ, hoặc dán tên quán ở dòng phía trên link.");
+      showToast(backendUsed
+        ? "⚠️ Máy chủ không đọc được thông tin từ link này. Hãy thử dán URL đầy đủ trên thanh địa chỉ trình duyệt."
+        : "⚠️ Chưa kết nối được máy chủ. Hãy mở link rồi copy URL đầy đủ trên thanh địa chỉ, hoặc dán tên quán ở dòng phía trên link.");
       return;
     }
 
@@ -1633,9 +1605,9 @@ async function handleMagicAutoFill() {
 
     let message = `🪄 Đã điền: ${filled.join(", ")}.`;
     if (found.rating === null) {
-      message += apiKey
-        ? " Chưa lấy được số sao, bạn tự nhập nhé."
-        : " Chưa có khoá Places API nên không lấy được số sao & lượt đánh giá.";
+      message += backendUsed
+        ? " Chưa lấy được số sao — kiểm tra khoá Places API trên máy chủ hoặc tự nhập."
+        : " Không kết nối được máy chủ nên không lấy được số sao & lượt đánh giá.";
     }
     if (notes.length > 0) message += ` (${notes.join("; ")})`;
     showToast(message);
@@ -2204,17 +2176,20 @@ async function handleImportFile(event) {
 }
 
 /* ===================================================================
-   CÀI ĐẶT NGUỒN DỮ LIỆU (Google Places API key)
+   CÀI ĐẶT NGUỒN DỮ LIỆU
+
+   Chỉ lưu địa chỉ endpoint. Khoá Google Places nằm trong biến môi trường
+   của máy chủ, phía trình duyệt không bao giờ nhìn thấy nó.
    =================================================================== */
 
 function openSettingsModal() {
   if (!elements.settingsModal) return;
-  if (elements.settingsApiKey) {
-    elements.settingsApiKey.value = state.settings.googleApiKey || "";
-    elements.settingsApiKey.type = "password";
+  if (elements.settingsApiBase) {
+    elements.settingsApiBase.value = state.settings.apiBaseUrl || "";
   }
   showSettingsResult("", "");
   elements.settingsModal.classList.add("active");
+  refreshBackendStatus();
 }
 
 function showSettingsResult(message, kind) {
@@ -2224,8 +2199,7 @@ function showSettingsResult(message, kind) {
 }
 
 function saveSettings() {
-  const key = elements.settingsApiKey ? elements.settingsApiKey.value.trim() : "";
-  state.settings.googleApiKey = key;
+  state.settings.apiBaseUrl = elements.settingsApiBase ? elements.settingsApiBase.value.trim() : "";
 
   try {
     localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(state.settings));
@@ -2234,54 +2208,75 @@ function saveSettings() {
     return;
   }
 
-  updateMagicKeyHint();
-  showToast(key ? "🔑 Đã lưu khoá Google Places API." : "🔑 Đã lưu — hiện chạy bằng OpenStreetMap.");
+  showToast("💾 Đã lưu cài đặt endpoint.");
+  refreshBackendStatus();
   closeAllModals();
 }
 
-function clearApiKey() {
-  if (!confirm("Xoá khoá Google Places API khỏi trình duyệt này?")) return;
-  state.settings.googleApiKey = "";
-  localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(state.settings));
-  if (elements.settingsApiKey) elements.settingsApiKey.value = "";
-  updateMagicKeyHint();
-  showSettingsResult("Đã xoá khoá. Autofill sẽ chỉ dùng OpenStreetMap.", "ok");
-}
-
-/** Gọi thử Places API để người dùng biết khoá đã cấu hình đúng chưa */
-async function testApiKey() {
-  const key = elements.settingsApiKey ? elements.settingsApiKey.value.trim() : "";
-  if (!key) {
-    showSettingsResult("Bạn chưa nhập khoá nào.", "err");
-    return;
+/**
+ * Hỏi máy chủ xem sống chưa và đã có khoá chưa, rồi hiển thị trạng thái.
+ * Kết quả cũng quyết định có hiện dòng nhắc cấu hình ở ô Quét & Tự điền hay không.
+ */
+async function refreshBackendStatus() {
+  const box = elements.backendStatusBox;
+  if (box) {
+    box.textContent = "Đang kiểm tra máy chủ…";
+    box.className = "backend-status";
   }
 
-  elements.btnTestApiKey.disabled = true;
-  elements.btnTestApiKey.textContent = "⏳ Đang kiểm tra...";
+  try {
+    const status = await checkBackendHealth();
+    state.backendStatus = status;
+
+    if (box) {
+      if (status.hasKey) {
+        box.textContent = "🟢 Máy chủ hoạt động và đã cấu hình khoá Google Places — lấy được đầy đủ số sao, lượt đánh giá, giờ mở cửa và ảnh.";
+        box.className = "backend-status ok";
+      } else {
+        box.textContent = "🟡 Máy chủ hoạt động nhưng CHƯA có biến GOOGLE_MAPS_API_KEY — giải mã được link rút gọn, nhưng chưa lấy được số sao và lượt đánh giá.";
+        box.className = "backend-status warn";
+      }
+    }
+  } catch (e) {
+    state.backendStatus = { online: false, hasKey: false };
+    if (box) {
+      box.textContent = "🔴 Chưa kết nối được máy chủ (" + e.message + "). Trang vẫn chạy được nhưng chỉ tra địa chỉ qua OpenStreetMap.";
+      box.className = "backend-status err";
+    }
+  }
+
+  updateMagicKeyHint();
+}
+
+/** Nút Kiểm tra kết nối: dùng đúng giá trị đang gõ trong ô, chưa cần lưu */
+async function testBackend() {
+  const previous = state.settings.apiBaseUrl;
+  state.settings.apiBaseUrl = elements.settingsApiBase ? elements.settingsApiBase.value.trim() : "";
+
+  elements.btnTestBackend.disabled = true;
+  elements.btnTestBackend.textContent = "⏳ Đang kiểm tra...";
   showSettingsResult("", "");
 
   try {
-    const place = await fetchGooglePlace(key, {
-      textQuery: "Cafe Giảng 39 Nguyễn Hữu Huân Hà Nội",
-      lat: null,
-      lng: null
-    });
-
-    if (place && place.displayName) {
-      showSettingsResult(
-        `✅ Khoá hoạt động tốt. Thử tra "${place.displayName.text}" → ` +
-        `★ ${place.rating ?? "?"} (${place.userRatingCount ?? "?"} đánh giá).`,
-        "ok"
-      );
-    } else {
-      showSettingsResult("✅ Khoá hợp lệ nhưng không tìm thấy địa điểm thử nghiệm.", "ok");
-    }
+    const status = await checkBackendHealth();
+    showSettingsResult(
+      status.hasKey
+        ? "✅ Kết nối thành công và máy chủ đã có khoá Google Places. Bấm Lưu cài đặt để dùng."
+        : "🟡 Kết nối được máy chủ nhưng thiếu biến môi trường GOOGLE_MAPS_API_KEY. " +
+          "Vào Vercel → Settings → Environment Variables để thêm, rồi Redeploy.",
+      status.hasKey ? "ok" : "err"
+    );
+    await refreshBackendStatus();
   } catch (e) {
-    showSettingsResult("❌ " + e.message +
-      " — kiểm tra lại: đã bật Places API (New) chưa, và domain trang này đã nằm trong danh sách cho phép chưa.", "err");
+    state.settings.apiBaseUrl = previous;
+    showSettingsResult(
+      "❌ Không gọi được endpoint: " + e.message +
+      ". Kiểm tra lại địa chỉ, hoặc trang đang mở bằng file:// (cần chạy qua vercel dev / bản đã deploy).",
+      "err"
+    );
   } finally {
-    elements.btnTestApiKey.disabled = false;
-    elements.btnTestApiKey.textContent = "🧪 Kiểm tra khoá";
+    elements.btnTestBackend.disabled = false;
+    elements.btnTestBackend.textContent = "🧪 Kiểm tra kết nối";
   }
 }
 

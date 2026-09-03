@@ -36,7 +36,7 @@
           <button id="btnExportSheets" class="btn-export-csv" title="Xuất dữ liệu ra Google Sheets / Excel (.csv)" aria-label="Xuất Google Sheets">
             📊 Google Sheets
           </button>
-          <button id="btnOpenSettings" class="icon-btn" title="Cài đặt khoá Google Places API" aria-label="Cài đặt">🔑</button>
+          <button id="btnOpenSettings" class="icon-btn" title="Cài đặt nguồn dữ liệu tự động" aria-label="Cài đặt">🔑</button>
           <button id="themeToggleBtn" class="icon-btn" title="Đổi giao diện Tối/Sáng" aria-label="Đổi giao diện">🌙</button>
           <button id="btnImportData" class="icon-btn" title="Nhập / khôi phục dữ liệu từ file JSON" aria-label="Nhập dữ liệu">📥</button>
           <button id="btnExportData" class="icon-btn" title="Sao lưu / Xuất dữ liệu JSON" aria-label="Xuất dữ liệu">💾</button>
@@ -216,7 +216,7 @@
             </button>
           </div>
           <p class="magic-tip">💡 Hệ thống chỉ điền dữ liệu <strong>đọc được thật</strong> (tên, địa chỉ, toạ độ, quận). Ô nào không tra được sẽ để trống cho bạn tự nhập — không tự bịa số liệu.</p>
-          <p class="magic-tip" id="magicKeyHint">🔑 Chưa có khoá Google Places API — hiện chỉ lấy được tên &amp; địa chỉ. <a href="javascript:void(0)" onclick="openSettingsModal()">Thêm khoá</a> để lấy cả số sao, lượt đánh giá, giờ mở cửa và ảnh thật.</p>
+          <p class="magic-tip" id="magicKeyHint">🔑 Máy chủ chưa cấu hình khoá Google Places — hiện chỉ lấy được tên &amp; địa chỉ. <a href="javascript:void(0)" onclick="openSettingsModal()">Xem cách cấu hình</a> để lấy thêm số sao, lượt đánh giá, giờ mở cửa và ảnh thật.</p>
         </div>
 
         <form id="addPlaceForm">
@@ -508,52 +508,76 @@
           Quyết định trang web lấy thông tin quán từ đâu khi bạn dán link Google Maps.
         </p>
 
-        <div class="settings-source-box">
-          <div class="settings-source-title">🟢 OpenStreetMap — luôn bật, miễn phí, không cần khoá</div>
-          <p class="settings-source-desc">
-            Lấy được: <strong>tên quán, địa chỉ đường phố, quận, toạ độ</strong>.
-            Không lấy được số sao và lượt đánh giá (OpenStreetMap không có dữ liệu này).
-          </p>
-        </div>
+        <div id="backendStatusBox" class="backend-status">Đang kiểm tra máy chủ…</div>
 
         <div class="settings-source-box">
-          <div class="settings-source-title">🔵 Google Places API — tuỳ chọn, cần khoá riêng</div>
+          <div class="settings-source-title">🔵 Máy chủ riêng — nơi cất khoá Google</div>
           <p class="settings-source-desc">
-            Lấy thêm: <strong>số sao thật, số lượt đánh giá, giờ mở cửa, mức giá và ảnh thật</strong> từ Google.
+            Khoá Google Places nằm trong biến môi trường trên máy chủ, <strong>không bao giờ gửi xuống trình duyệt</strong>.
+            Máy chủ cũng là thứ giải mã được link rút gọn <code>maps.app.goo.gl</code> — việc mà trình duyệt bị CORS chặn.
           </p>
 
           <div class="form-group" style="margin-top: 12px;">
-            <label class="form-label" for="settingsApiKey">Khoá Google Places API (New)</label>
-            <div style="display: flex; gap: 8px;">
-              <input type="password" id="settingsApiKey" class="form-input" placeholder="AIza..." autocomplete="off">
-              <button type="button" id="btnToggleKeyVisible" class="btn-open-maps" style="padding: 0 14px; white-space: nowrap;">👁️</button>
-            </div>
+            <label class="form-label" for="settingsApiBase">Địa chỉ endpoint</label>
+            <input type="text" id="settingsApiBase" class="form-input" placeholder="/api/place" autocomplete="off">
+            <p class="settings-source-desc" style="margin-top: 6px;">
+              Để trống nếu web và API chạy cùng domain (trường hợp Vercel thông thường).
+              Chỉ điền khi tách domain, ví dụ <code>https://foodguide-api.vercel.app/api/place</code>.
+            </p>
           </div>
 
           <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-            <button type="button" id="btnTestApiKey" class="btn-open-maps" style="padding: 9px 14px;">🧪 Kiểm tra khoá</button>
+            <button type="button" id="btnTestBackend" class="btn-open-maps" style="padding: 9px 14px;">🧪 Kiểm tra kết nối</button>
             <button type="button" id="btnSaveSettings" class="btn-add-place" style="padding: 9px 16px;">💾 Lưu cài đặt</button>
-            <button type="button" id="btnClearApiKey" class="btn-row-action btn-row-delete" style="padding: 9px 14px;">🗑️ Xoá khoá</button>
           </div>
 
           <div id="settingsTestResult" class="settings-test-result"></div>
-
-          <details class="settings-help">
-            <summary>Cách lấy khoá (khoảng 3 phút)</summary>
-            <ol>
-              <li>Vào <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console</a> → tạo một Project.</li>
-              <li>Mở <strong>APIs &amp; Services → Library</strong>, bật <strong>Places API (New)</strong>.</li>
-              <li>Vào <strong>Credentials → Create credentials → API key</strong>.</li>
-              <li>Bấm <strong>Edit API key</strong> → mục <em>Application restrictions</em> chọn <strong>Websites</strong> → thêm domain trang này (ví dụ <code>ten-ban.github.io/*</code>). Bước này bắt buộc, nếu không ai cũng dùng được khoá của bạn.</li>
-              <li>Mục <em>API restrictions</em> → giới hạn đúng <strong>Places API (New)</strong>.</li>
-            </ol>
-            <p class="settings-warning">
-              ⚠️ Khoá được lưu trong <code>localStorage</code> của trình duyệt bạn và đi kèm mỗi yêu cầu gửi từ trình duyệt,
-              nên bất kỳ ai mở trang cũng có thể đọc được. Vì vậy <strong>bắt buộc</strong> giới hạn khoá theo domain
-              và chỉ cho phép Places API. Đừng dùng khoá không giới hạn.
-            </p>
-          </details>
         </div>
+
+        <div class="settings-source-box">
+          <div class="settings-source-title">🟢 OpenStreetMap — dự phòng, luôn bật</div>
+          <p class="settings-source-desc">
+            Khi không có máy chủ (ví dụ mở thẳng file <code>index.html</code>), trang vẫn tra được
+            <strong>địa chỉ và quận</strong> từ toạ độ. Không lấy được số sao và lượt đánh giá — dữ liệu đó chỉ Google mới có.
+          </p>
+        </div>
+
+        <details class="settings-help">
+          <summary>Cách dựng máy chủ &amp; lấy khoá Google (khoảng 10 phút)</summary>
+
+          <p style="margin-top: 10px;"><strong>Bước 1 — Tạo khoá Google Places API</strong></p>
+          <ol>
+            <li>Vào <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console</a> → tạo một Project.</li>
+            <li>Mở <strong>APIs &amp; Services → Library</strong>, bật <strong>Places API (New)</strong>.</li>
+            <li>Vào <strong>Credentials → Create credentials → API key</strong>, sao chép khoá.</li>
+            <li>Bấm <strong>Edit API key</strong> → <em>Application restrictions</em> chọn <strong>None</strong>
+                (khoá dùng ở phía máy chủ nên không giới hạn theo domain trình duyệt được).</li>
+            <li><em>API restrictions</em> → giới hạn đúng <strong>Places API (New)</strong>.</li>
+            <li>Vào <strong>Billing → Budgets &amp; alerts</strong> đặt ngân sách cảnh báo để không bị phát sinh chi phí ngoài ý muốn.</li>
+          </ol>
+
+          <p><strong>Bước 2 — Deploy lên Vercel</strong></p>
+          <ol>
+            <li>Đẩy mã nguồn lên GitHub (file <code>.env</code> đã bị <code>.gitignore</code> chặn, khoá không lên theo).</li>
+            <li>Vào <a href="https://vercel.com/new" target="_blank" rel="noopener">vercel.com/new</a> → chọn repository → <strong>Deploy</strong>.</li>
+            <li>Mở <strong>Settings → Environment Variables</strong>, thêm:
+                <br><code>GOOGLE_MAPS_API_KEY</code> = khoá vừa tạo.</li>
+            <li>Vào tab <strong>Deployments</strong> → <strong>Redeploy</strong> để biến môi trường có hiệu lực.</li>
+          </ol>
+
+          <p><strong>Chạy thử ở máy</strong></p>
+          <ol>
+            <li><code>npm i -g vercel</code></li>
+            <li>Tạo file <code>.env</code> theo mẫu <code>.env.example</code>, điền khoá.</li>
+            <li><code>vercel dev</code> → mở <code>http://localhost:3000</code></li>
+          </ol>
+
+          <p class="settings-warning">
+            🔒 Khoá chỉ nằm trong biến môi trường của máy chủ. Trình duyệt gọi <code>/api/place</code> và
+            nhận về dữ liệu đã xử lý — không có bất kỳ phần nào của khoá trong phản hồi.
+            Endpoint có sẵn giới hạn 30 lượt/phút cho mỗi IP và chỉ nhận link thuộc domain Google Maps.
+          </p>
+        </details>
       </div>
     </div>
   </div>

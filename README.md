@@ -1,97 +1,153 @@
 # 🍜 Hanoi Food & Cafe Guide (Cẩm Nang Ẩm Thực Cá Nhân)
 
-Website tổng hợp, tuyển chọn và đánh giá các quán ăn, quán cà phê tại Hà Nội với giao diện **Vibrant & Friendly** (lấy cảm hứng từ linkbio oreviet), tích hợp Google Maps định vị 1 chạm và chế độ lọc thông minh.
+Website tổng hợp, tuyển chọn và đánh giá các quán ăn, quán cà phê tại Hà Nội. Dán link Google Maps là hệ thống tự đọc thông tin quán, kèm bộ lọc thông minh và định vị 1 chạm.
 
 ---
 
-## ✨ Tính năng nổi bật
+## ✨ Tính năng
 
-1. **2 Chế độ hiển thị linh hoạt (View Switcher)**:
-   - 🔍 **Chế độ Khám phá (Explorer Card View)**: Xem chi tiết từng quán gồm hình ảnh, đánh giá ★, review tác giả, món *Must-Try*, mức giá và nút *Mở Google Maps* / *Chỉ đường*.
-   - 📑 **Chế độ Danh mục Google Maps (Portal Linkbio View)**: Giống phong cách `oreviet`, nhóm các danh mục món (Món sợi, Lẩu nướng, Cafe chill, Quán nhậu...) để mở nhanh danh sách Google Maps hoặc lọc tức thì.
-2. **Tìm kiếm & Bộ lọc tức thì (Instant Filter)**:
-   - Tìm kiếm realtime theo tên quán, món ăn, địa chỉ, phố xá.
-   - Lọc theo Quận/Khu vực (Hoàn Kiếm, Ba Đình, Đống Đa, Hai Bà Trưng, Cầu Giấy...).
-   - Lọc theo Mức giá (Dưới 50k, 50k - 150k, Trên 150k).
-   - Sắp xếp theo Đề xuất, Đánh giá cao nhất, Tên A-Z.
-3. **Modal Thêm quán trực quan (+ Thêm quán mới)**:
-   - Tự do nhập thêm quán ăn yêu thích ngay trên giao diện web mà không cần chạm vào code. Dữ liệu tự động lưu trong trình duyệt (`LocalStorage`).
-4. **Sao lưu & Xuất dữ liệu JSON**:
-   - Bấm nút 💾 để tải về toàn bộ danh sách quán dưới dạng file `.json`.
-5. **Giao diện Responsive 100% & Hỗ trợ Dark Mode**:
-   - Tối ưu hoàn hảo cho điện thoại di động (Mobile-First).
-   - Nút bật/tắt Dark Mode 🌙/☀️ dễ chịu cho mắt khi xem về đêm.
+1. **Tự động đọc thông tin từ link Google Maps**
+   Dán link vào ô "Quét & Tự điền", hệ thống lấy tên quán, địa chỉ, quận, toạ độ, danh mục — và nếu bạn cấu hình khoá API thì lấy cả số sao, lượt đánh giá, giờ mở cửa, ảnh thật.
+   👉 Xem chi tiết ở mục [Autofill hoạt động thế nào](#-autofill-hoạt-động-thế-nào).
+
+2. **Nhãn Đã xác minh / Chưa xác minh**
+   Mỗi quán mang một nhãn cho biết dữ liệu đã được đối chiếu với Google Maps hay chưa, kèm nguồn dữ liệu (Google Places / OpenStreetMap / tự nhập / dựng sẵn). Lọc nhanh bằng chip **⚠️ Chưa xác minh** để biết còn quán nào cần rà lại. Bấm nút **✅ Xác minh** trong bảng Quản lý để đánh dấu từng quán.
+
+3. **2 chế độ hiển thị**
+   - 🔍 **Khám phá**: thẻ chi tiết từng quán — ảnh, ★, review, món *Must-Try*, mức giá, nút mở Google Maps / chỉ đường.
+   - 📑 **Danh mục**: gom nhóm theo loại món để mở nhanh danh sách trên Google Maps.
+
+4. **Tìm kiếm & bộ lọc tức thì**
+   - Tìm kiếm **không phân biệt dấu**: gõ `pho` ra `Phở`, `ca phe trung` ra `Cà Phê Trứng`.
+   - Lọc theo quận, mức giá, trạng thái xác minh; sắp xếp theo Đề xuất / Điểm cao / Tên A-Z.
+
+5. **Quản lý dữ liệu**
+   - Thêm / sửa / xoá quán ngay trên giao diện, lưu vào `LocalStorage`.
+   - 💾 **Xuất JSON** để sao lưu, 📥 **Nhập JSON** để khôi phục hoặc chuyển sang máy khác.
+   - 📊 **Xuất CSV** (UTF-8 BOM) mở thẳng bằng Google Sheets / Excel không lỗi tiếng Việt.
+
+6. **Responsive & Dark Mode** — tối ưu mobile-first, có thanh điều hướng dưới cho điện thoại.
 
 ---
 
-## 🚀 Cách chạy & xem thử trên máy tính
+## 🪄 Autofill hoạt động thế nào
 
-### Cách 1: Mở trực tiếp (Nhanh nhất)
-- Nhấp đúp chuột vào file `index.html` để mở ngay trên trình duyệt Chrome, Edge hoặc Safari.
+Nguyên tắc: **chỉ điền dữ liệu đọc được thật.** Ô nào không tra ra thì để trống cho bạn tự nhập — hệ thống không sinh số sao, giá tiền hay lời review giả.
 
-### Cách 2: Chạy qua Live Server (Khuyên dùng)
-- Nếu dùng VS Code / IDE: Cài extension **Live Server** và nhấn **Go Live**.
-- Hoặc dùng lệnh terminal:
+Khi bạn dán link, hệ thống thử lần lượt:
+
+| Bước | Nguồn | Lấy được gì |
+|---|---|---|
+| 1 | Bóc thẳng từ URL | Tên quán, toạ độ — **không cần mạng, luôn chạy được** |
+| 2 | Đoạn text bạn dán kèm | Tên + địa chỉ (nút Chia sẻ của app Google Maps kèm sẵn) |
+| 3 | CORS proxy công cộng | Giải mã link rút gọn `maps.app.goo.gl` — *hay hỏng, chỉ là nỗ lực bổ sung* |
+| 4 | **Google Places API** *(cần khoá)* | **Số sao, lượt đánh giá, giờ mở cửa, mức giá, ảnh thật** |
+| 5 | **OpenStreetMap / Nominatim** | Địa chỉ đường phố + quận, từ toạ độ — miễn phí, không cần khoá |
+
+### 💡 Mẹo dán link cho kết quả tốt nhất
+
+- **Tốt nhất — URL đầy đủ:** mở quán trên Google Maps bằng trình duyệt, copy nguyên URL trên thanh địa chỉ (dạng `google.com/maps/place/...@21.04,105.84...`). Có sẵn tên + toạ độ nên chạy ngay, không phụ thuộc proxy.
+- **Cũng rất tốt — cả đoạn Chia sẻ:** trên app Google Maps điện thoại bấm *Chia sẻ*, dán **nguyên cả đoạn** gồm tên quán, địa chỉ và link:
+  ```
+  Hôm Nào Cà Phê
+  Số 10, Ngõ 82 Nghĩa Tân, Cầu Giấy, Hà Nội
+  https://maps.app.goo.gl/xxxxx
+  ```
+- **Kém nhất — chỉ mỗi link rút gọn** không kèm chữ: phải trông chờ vào CORS proxy công cộng, mà các dịch vụ này thường xuyên chết. Nếu thất bại, hệ thống sẽ báo và bạn dùng một trong hai cách trên.
+
+### 🔑 Bật Google Places API để lấy số sao thật
+
+Số sao và lượt đánh giá **chỉ Google mới có** — OpenStreetMap không lưu dữ liệu này. Muốn lấy tự động, bấm nút 🔑 trên đầu trang và làm theo:
+
+1. Vào [Google Cloud Console](https://console.cloud.google.com/) → tạo một Project.
+2. **APIs & Services → Library** → bật **Places API (New)**.
+3. **Credentials → Create credentials → API key**.
+4. Bấm **Edit API key** → *Application restrictions* chọn **Websites** → thêm domain trang này (ví dụ `ten-ban.github.io/*`).
+5. *API restrictions* → giới hạn đúng **Places API (New)**.
+6. Dán khoá vào ô trong trang, bấm **🧪 Kiểm tra khoá** rồi **💾 Lưu**.
+
+> ⚠️ **Bắt buộc giới hạn khoá theo domain.** Khoá lưu trong `localStorage` trình duyệt và đi kèm mỗi request, nên ai mở trang cũng đọc được. Khoá không giới hạn có thể bị người khác dùng và bạn phải trả tiền.
+
+Không có khoá thì trang vẫn chạy bình thường — chỉ là bạn tự nhập số sao thay vì để hệ thống điền.
+
+---
+
+## 🚀 Chạy thử trên máy
+
+- **Nhanh nhất:** nhấp đúp `index.html`.
+- **Khuyên dùng:** extension **Live Server** của VS Code, hoặc:
   ```bash
   npx serve .
   ```
 
+> Lưu ý: mở bằng `file://` vẫn chạy được, nhưng chạy qua server (Live Server / GitHub Pages) thì phần gọi Google Places API mới giới hạn được khoá theo domain.
+
 ---
 
-## 🛠️ Hướng dẫn Tùy biến & Chỉnh sửa Dữ liệu
+## 🛠️ Tuỳ biến dữ liệu
 
-### 1. Thay đổi thông tin cá nhân (Avatar, Tên, Bio, Mạng xã hội)
-Mở file [js/data.js](file:///d:/_Code/foodguide/js/data.js), tìm biến `DEFAULT_PROFILE` ở cuối file:
+### Thông tin cá nhân (Avatar, Tên, Bio, Mạng xã hội)
+Mở [js/data.js](js/data.js), tìm `DEFAULT_PROFILE` ở cuối file:
 ```javascript
 const DEFAULT_PROFILE = {
   name: "Tên của bạn hoặc Tên Guide",
   handle: "@your_handle",
-  bio: "Lời giới thiệu ngắn về sở thích ăn uống của bạn...",
+  bio: "Lời giới thiệu ngắn...",
   avatar: "Link ảnh đại diện",
-  socials: {
-    facebook: "https://facebook.com/...",
-    instagram: "https://instagram.com/...",
-    tiktok: "https://tiktok.com/...",
-    threads: "https://threads.net/..."
-  }
+  socials: { facebook: "...", instagram: "...", tiktok: "...", threads: "..." }
 };
 ```
 
-### 2. Thêm hoặc Sửa danh sách quán ăn mặc định
-Mở file [js/data.js](file:///d:/_Code/foodguide/js/data.js), trong mảng `INITIAL_PLACES`, thêm một đối tượng quán mới:
+### Thêm quán vào danh sách dựng sẵn
+Thêm object vào mảng `INITIAL_PLACES` trong [js/data.js](js/data.js):
 ```javascript
 {
   id: "place-custom-1",
   name: "Tên Quán Ăn",
-  category: "mon-soi", // mon-soi | com-xoi | banh-mi-cuon | lau-nuong | cafe-chill | an-vat | do-a-au | quan-nhau
+  category: "mon-soi",   // mon-soi | com-xoi | banh-mi-cuon | lau-nuong
+                         // cafe-chill | an-vat | do-a-au | quan-nhau
   district: "Hoàn Kiếm",
   address: "Địa chỉ cụ thể...",
-  mapsUrl: "https://maps.google.com/?q=Ten+Quan+Dia+Chi",
-  rating: 4.8,
+  mapsUrl: "https://maps.google.com/?q=...",
+  rating: 4.8,           // để null nếu chưa biết — đừng đoán
+  reviewCount: 1200,     // để null nếu chưa biết
   priceRange: "40.000đ - 70.000đ",
-  priceLevel: "mid", // low (<50k), mid (50k-150k), high (>150k)
+  priceLevel: "mid",     // low (<50k) | mid (50k-150k) | high (>150k)
   time: "07:00 - 22:00",
-  mustTry: "Món ngon nhất định phải gọi",
-  review: "Nhận xét chi tiết của bạn về hương vị và không gian...",
+  mustTry: "Món nên gọi",
+  review: "Nhận xét của bạn...",
   tags: ["Ăn sáng", "Phố Cổ"],
-  image: "https://link-anh-mon-an.jpg",
+  image: "https://link-anh.jpg",
+  verified: true,        // true nếu bạn đã đối chiếu với Google Maps
   featured: true
 }
 ```
 
+> Dữ liệu bạn chỉnh trong giao diện được lưu ở `LocalStorage` và **luôn thắng** giá trị trong `data.js`. Quán bạn xoá sẽ không quay lại sau khi tải lại trang.
+
 ---
 
-## 🌐 Hướng dẫn Đưa Website lên Mạng MIỄN PHÍ (Deploy)
+## 🌐 Đưa lên mạng miễn phí
 
-Bạn có thể đưa trang web này lên mạng để ai cũng có thể truy cập qua đường link riêng:
+### GitHub Pages
+1. Đẩy toàn bộ thư mục lên một repository GitHub.
+2. **Settings → Pages** → Branch chọn `main` / `root` → **Save**.
+3. Sau khoảng 1 phút có link dạng `https://ten-ban.github.io/foodguide/`.
+4. Nhớ thêm domain này vào phần giới hạn của khoá Google API (nếu có dùng).
 
-### Cách 1: Qua GitHub Pages (Miễn phí 100%)
-1. Đăng tải toàn bộ thư mục code lên một Repository trên GitHub (ví dụ: `foodguide`).
-2. Vào **Settings** của Repo > Chọn mục **Pages**.
-3. Tại phần **Branch**, chọn `main` / `root` rồi nhấn **Save**.
-4. Sau 1 phút, bạn sẽ có đường link dạng: `https://ten-ban.github.io/foodguide/`
+### Vercel / Netlify
+Kéo thả thư mục vào [app.netlify.com/drop](https://app.netlify.com/drop) hoặc [vercel.com](https://vercel.com) là xong.
 
-### Cách 2: Qua Vercel / Netlify (Kéo thả siêu nhanh)
-1. Truy cập [app.netlify.com/drop](https://app.netlify.com/drop) hoặc [vercel.com](https://vercel.com).
-2. Kéo thả toàn bộ thư mục `foodguide` vào trình duyệt.
-3. Nhận ngay đường link web trực tiếp để gắn vào Bio Instagram / TikTok / Facebook!
+---
+
+## 📁 Cấu trúc
+
+```
+foodguide/
+├── index.html              # Giao diện & các modal
+├── css/style.css           # Toàn bộ style, hỗ trợ Dark Mode
+├── js/
+│   ├── data.js             # Dữ liệu quán dựng sẵn, danh mục, quận, profile
+│   └── app.js              # Toàn bộ logic: render, lọc, autofill, quản lý
+└── data/hanoi_cafes_top.csv  # File CSV xuất mẫu (không được code dùng đến)
+```

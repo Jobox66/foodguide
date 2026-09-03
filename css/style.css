@@ -477,7 +477,7 @@ body {
   padding: 8px 16px;
   background: var(--bg-card);
   border: var(--border-card);
-  border-radius: var(--border-radius-pill);
+  border-radius: var(--border-radius-md);
   font-family: var(--font-main);
   font-size: 0.88rem;
   font-weight: 700;
@@ -496,10 +496,10 @@ body {
 }
 
 .cat-pill.active {
-  background: var(--primary);
-  color: white;
-  border-color: var(--primary);
-  box-shadow: 0 4px 14px rgba(22, 99, 164, 0.3);
+  background: var(--accent-yellow);
+  color: #1A2433;
+  border-color: var(--accent-yellow-hover);
+  box-shadow: 0 4px 14px rgba(255, 220, 78, 0.4);
 }
 
 .cat-icon {
@@ -528,8 +528,8 @@ body {
 }
 
 .cat-pill.active .cat-count {
-  background: rgba(255, 255, 255, 0.25);
-  color: white;
+  background: rgba(0, 0, 0, 0.12);
+  color: #1A2433;
 }
 
 /* ===================================================================
@@ -695,88 +695,6 @@ body {
   background: var(--accent-orange-light);
 }
 
-.btn-reset-filters:hover {
-  border-color: var(--text-main);
-  color: var(--text-main);
-  background: var(--bg-input);
-}
-
-/* ===================================================================
-   CATEGORY PILLS (Carousel / Horizontal bar)
-   =================================================================== */
-.category-pills-wrapper {
-  margin-bottom: 24px;
-  position: relative;
-}
-
-.category-pills {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding-bottom: 8px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--primary-light) transparent;
-  -webkit-overflow-scrolling: touch;
-}
-
-.category-pills::-webkit-scrollbar {
-  height: 4px;
-}
-
-.category-pills::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: var(--border-radius-pill);
-}
-
-.cat-pill {
-  flex-shrink: 0;
-  background: var(--bg-card);
-  border: var(--border-card);
-  padding: 10px 16px;
-  border-radius: var(--border-radius-md);
-  font-family: var(--font-main);
-  font-weight: 700;
-  font-size: 0.88rem;
-  color: var(--text-main);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  box-shadow: var(--shadow-subtle);
-  transition: var(--transition);
-}
-
-.cat-pill .cat-icon {
-  font-size: 1.15rem;
-}
-
-.cat-pill .cat-count {
-  background: var(--bg-input);
-  padding: 2px 8px;
-  border-radius: var(--border-radius-pill);
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--text-muted);
-}
-
-.cat-pill:hover {
-  transform: translateY(-2px);
-  border-color: var(--primary);
-  box-shadow: var(--shadow-sm);
-}
-
-.cat-pill.active {
-  background: var(--accent-yellow);
-  color: #1A2433;
-  border-color: var(--accent-yellow-hover);
-  box-shadow: 0 4px 14px rgba(255, 220, 78, 0.4);
-}
-
-.cat-pill.active .cat-count {
-  background: rgba(0,0,0,0.12);
-  color: #1A2433;
-}
-
 /* ===================================================================
    PORTAL / LINKBIO VIEW (Style oreviet)
    =================================================================== */
@@ -826,27 +744,8 @@ body {
   box-shadow: var(--shadow-subtle);
 }
 
-.portal-cat-info h3 {
-  font-family: var(--font-heading);
-  font-size: 1.12rem;
-  font-weight: 800;
-  color: var(--text-main);
-  margin-bottom: 4px;
-}
 
-.portal-cat-info p {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  line-height: 1.45;
-}
 
-.portal-cat-footer {
-  display: flex;
-  gap: 10px;
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px dashed var(--border-color);
-}
 
 .btn-open-maps-list {
   flex: 1;
@@ -1335,6 +1234,9 @@ body {
 
 .magic-input {
   flex: 1;
+  min-width: 0;
+  resize: vertical;
+  line-height: 1.45;
   padding: 10px 14px;
   font-family: var(--font-main);
   font-size: 0.88rem;
@@ -1786,4 +1688,214 @@ body {
   .modal-body {
     padding: 18px 16px calc(24px + env(safe-area-inset-bottom));
   }
+}
+
+/* ===================================================================
+   TRẠNG THÁI XÁC MINH DỮ LIỆU (Data verification)
+   =================================================================== */
+.filter-chip.verify-chip.active {
+  background: var(--accent-green);
+  color: #fff;
+  border-color: var(--accent-green);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.28);
+}
+
+.filter-chip.verify-chip[data-verify="unverified"].active {
+  background: var(--accent-orange);
+  border-color: var(--accent-orange);
+  box-shadow: 0 2px 8px rgba(255, 107, 74, 0.3);
+}
+
+.unverified-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: var(--border-radius-pill);
+  background: var(--accent-orange-light);
+  color: #C2410C;
+  border: 1px solid rgba(255, 107, 74, 0.3);
+  white-space: nowrap;
+}
+
+.verified-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: var(--border-radius-pill);
+  background: var(--accent-green-light);
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .unverified-flag {
+  background: rgba(255, 107, 74, 0.14);
+  color: #FDBA74;
+}
+
+[data-theme="dark"] .verified-flag {
+  background: rgba(16, 185, 129, 0.14);
+  color: #6EE7B7;
+}
+
+.place-flag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.value-missing {
+  color: var(--text-light);
+  font-style: italic;
+  font-weight: 600;
+}
+
+.verify-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 14px;
+  margin-top: 6px;
+  border-radius: var(--border-radius-sm);
+  background: var(--accent-green-light);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+[data-theme="dark"] .verify-checkbox {
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.verify-checkbox input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent-green);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.btn-row-verify {
+  background: var(--accent-green-light);
+  color: #047857;
+}
+
+.btn-row-verify:hover {
+  background: var(--accent-green);
+  color: #fff;
+}
+
+.source-tag {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: var(--border-radius-pill);
+  background: var(--bg-input);
+  color: var(--text-muted);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* ===================================================================
+   MODAL CÀI ĐẶT NGUỒN DỮ LIỆU
+   =================================================================== */
+.settings-source-box {
+  border: var(--border-card);
+  border-radius: var(--border-radius-md);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  background: var(--bg-page);
+}
+
+.settings-source-title {
+  font-weight: 800;
+  font-size: 0.92rem;
+  color: var(--text-main);
+  margin-bottom: 6px;
+}
+
+.settings-source-desc {
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.settings-test-result {
+  margin-top: 10px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.5;
+  display: none;
+}
+
+.settings-test-result.show {
+  display: block;
+}
+
+.settings-test-result.ok {
+  color: #047857;
+}
+
+.settings-test-result.err {
+  color: #C2410C;
+}
+
+.settings-help {
+  margin-top: 14px;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.settings-help summary {
+  cursor: pointer;
+  font-weight: 800;
+  color: var(--primary);
+  padding: 4px 0;
+}
+
+.settings-help ol {
+  margin: 10px 0 0 18px;
+  line-height: 1.7;
+}
+
+.settings-help code {
+  background: var(--bg-input);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.82em;
+}
+
+.settings-warning {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--border-radius-sm);
+  background: var(--accent-orange-light);
+  color: #9A3412;
+  line-height: 1.55;
+  border-left: 3px solid var(--accent-orange);
+}
+
+[data-theme="dark"] .settings-warning {
+  background: rgba(255, 107, 74, 0.12);
+  color: #FDBA74;
+}
+
+/* Thẻ danh mục rỗng ở chế độ Danh mục */
+.portal-cat-card.is-empty {
+  opacity: 0.55;
+}
+
+.portal-cat-card.is-empty .btn-explore-cat {
+  cursor: not-allowed;
+  opacity: 0.6;
 }

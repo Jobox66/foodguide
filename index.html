@@ -36,9 +36,12 @@
           <button id="btnExportSheets" class="btn-export-csv" title="Xuất dữ liệu ra Google Sheets / Excel (.csv)" aria-label="Xuất Google Sheets">
             📊 Google Sheets
           </button>
+          <button id="btnOpenSettings" class="icon-btn" title="Cài đặt khoá Google Places API" aria-label="Cài đặt">🔑</button>
           <button id="themeToggleBtn" class="icon-btn" title="Đổi giao diện Tối/Sáng" aria-label="Đổi giao diện">🌙</button>
+          <button id="btnImportData" class="icon-btn" title="Nhập / khôi phục dữ liệu từ file JSON" aria-label="Nhập dữ liệu">📥</button>
           <button id="btnExportData" class="icon-btn" title="Sao lưu / Xuất dữ liệu JSON" aria-label="Xuất dữ liệu">💾</button>
           <button id="shareGuideBtn" class="icon-btn" title="Chia sẻ trang này" aria-label="Chia sẻ">🔗</button>
+          <input type="file" id="importFileInput" accept="application/json,.json" hidden>
         </div>
       </div>
 
@@ -130,6 +133,13 @@
 
           <span class="filter-divider"></span>
 
+          <!-- Verification Chips -->
+          <button class="filter-chip verify-chip active" data-verify="all">🗂️ Mọi trạng thái</button>
+          <button class="filter-chip verify-chip" data-verify="verified">✅ Đã xác minh</button>
+          <button class="filter-chip verify-chip" data-verify="unverified">⚠️ Chưa xác minh</button>
+
+          <span class="filter-divider"></span>
+
           <!-- Reset Chip -->
           <button id="resetFiltersBtn" class="filter-chip reset-chip" title="Đặt lại toàn bộ bộ lọc">
             🔄 Đặt lại
@@ -200,12 +210,13 @@
             <span>🪄 Tự động nhận diện từ Google Maps</span>
           </div>
           <div class="magic-input-group">
-            <input type="text" id="quickMapsUrlInput" class="magic-input" placeholder="Dán link quán trên Google Maps vào đây...">
+            <textarea id="quickMapsUrlInput" class="magic-input" rows="2" placeholder="Dán link Google Maps (hoặc dán cả đoạn Chia sẻ gồm tên quán + địa chỉ + link)..."></textarea>
             <button type="button" id="btnQuickAutoFill" class="btn-magic-autofill">
               ✨ Quét & Tự điền
             </button>
           </div>
-          <p class="magic-tip">💡 Hệ thống sẽ tự động tách tên quán, địa chỉ, quận, chọn danh mục món, gợi ý review & món Must-Try!</p>
+          <p class="magic-tip">💡 Hệ thống chỉ điền dữ liệu <strong>đọc được thật</strong> (tên, địa chỉ, toạ độ, quận). Ô nào không tra được sẽ để trống cho bạn tự nhập — không tự bịa số liệu.</p>
+          <p class="magic-tip" id="magicKeyHint">🔑 Chưa có khoá Google Places API — hiện chỉ lấy được tên &amp; địa chỉ. <a href="javascript:void(0)" onclick="openSettingsModal()">Thêm khoá</a> để lấy cả số sao, lượt đánh giá, giờ mở cửa và ảnh thật.</p>
         </div>
 
         <form id="addPlaceForm">
@@ -242,7 +253,11 @@
           <div class="form-row">
             <div class="form-group">
               <label class="form-label" for="newPlaceRating">Điểm đánh giá (1.0 - 5.0)</label>
-              <input type="number" id="newPlaceRating" class="form-input" min="1.0" max="5.0" step="0.1" value="4.8">
+              <input type="number" id="newPlaceRating" class="form-input" min="1.0" max="5.0" step="0.1" placeholder="Để trống nếu chưa rõ">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="newPlaceReviewCount">Lượt đánh giá Google Maps</label>
+              <input type="number" id="newPlaceReviewCount" class="form-input" min="0" step="1" placeholder="Để trống nếu chưa rõ">
             </div>
             <div class="form-group">
               <label class="form-label" for="newPlacePriceLevel">Mức giá</label>
@@ -284,6 +299,15 @@
             <label class="form-label" for="newPlaceImage">Link hình ảnh món ăn (Tùy chọn)</label>
             <input type="url" id="newPlaceImage" class="form-input" placeholder="https://images.unsplash.com/...">
           </div>
+
+          <input type="hidden" id="newPlaceDataSource" value="manual">
+          <input type="hidden" id="newPlaceLat">
+          <input type="hidden" id="newPlaceLng">
+
+          <label class="verify-checkbox">
+            <input type="checkbox" id="newPlaceVerified">
+            <span>✅ Tôi đã đối chiếu thông tin này với Google Maps</span>
+          </label>
 
           <button type="submit" class="btn-submit">💾 Lưu & Thêm vào Cẩm Nang</button>
         </form>
@@ -460,8 +484,76 @@
             <input type="url" id="editPlaceImage" class="form-input">
           </div>
 
+          <label class="verify-checkbox">
+            <input type="checkbox" id="editPlaceVerified">
+            <span>✅ Đã đối chiếu thông tin này với Google Maps</span>
+          </label>
+
           <button type="submit" class="btn-submit">💾 Lưu Thay Đổi</button>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================
+       MODAL: CÀI ĐẶT NGUỒN DỮ LIỆU (Settings)
+       =================================================================== -->
+  <div id="settingsModal" class="modal-overlay" role="dialog" aria-modal="true">
+    <div class="modal-card" style="max-width: 560px;">
+      <div class="sheet-drag-handle"></div>
+      <button class="modal-close-btn" title="Đóng">✕</button>
+      <div class="modal-body">
+        <h2 class="modal-title" style="margin-bottom: 6px;">🔑 Nguồn dữ liệu tự động</h2>
+        <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 18px;">
+          Quyết định trang web lấy thông tin quán từ đâu khi bạn dán link Google Maps.
+        </p>
+
+        <div class="settings-source-box">
+          <div class="settings-source-title">🟢 OpenStreetMap — luôn bật, miễn phí, không cần khoá</div>
+          <p class="settings-source-desc">
+            Lấy được: <strong>tên quán, địa chỉ đường phố, quận, toạ độ</strong>.
+            Không lấy được số sao và lượt đánh giá (OpenStreetMap không có dữ liệu này).
+          </p>
+        </div>
+
+        <div class="settings-source-box">
+          <div class="settings-source-title">🔵 Google Places API — tuỳ chọn, cần khoá riêng</div>
+          <p class="settings-source-desc">
+            Lấy thêm: <strong>số sao thật, số lượt đánh giá, giờ mở cửa, mức giá và ảnh thật</strong> từ Google.
+          </p>
+
+          <div class="form-group" style="margin-top: 12px;">
+            <label class="form-label" for="settingsApiKey">Khoá Google Places API (New)</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="password" id="settingsApiKey" class="form-input" placeholder="AIza..." autocomplete="off">
+              <button type="button" id="btnToggleKeyVisible" class="btn-open-maps" style="padding: 0 14px; white-space: nowrap;">👁️</button>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" id="btnTestApiKey" class="btn-open-maps" style="padding: 9px 14px;">🧪 Kiểm tra khoá</button>
+            <button type="button" id="btnSaveSettings" class="btn-add-place" style="padding: 9px 16px;">💾 Lưu cài đặt</button>
+            <button type="button" id="btnClearApiKey" class="btn-row-action btn-row-delete" style="padding: 9px 14px;">🗑️ Xoá khoá</button>
+          </div>
+
+          <div id="settingsTestResult" class="settings-test-result"></div>
+
+          <details class="settings-help">
+            <summary>Cách lấy khoá (khoảng 3 phút)</summary>
+            <ol>
+              <li>Vào <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console</a> → tạo một Project.</li>
+              <li>Mở <strong>APIs &amp; Services → Library</strong>, bật <strong>Places API (New)</strong>.</li>
+              <li>Vào <strong>Credentials → Create credentials → API key</strong>.</li>
+              <li>Bấm <strong>Edit API key</strong> → mục <em>Application restrictions</em> chọn <strong>Websites</strong> → thêm domain trang này (ví dụ <code>ten-ban.github.io/*</code>). Bước này bắt buộc, nếu không ai cũng dùng được khoá của bạn.</li>
+              <li>Mục <em>API restrictions</em> → giới hạn đúng <strong>Places API (New)</strong>.</li>
+            </ol>
+            <p class="settings-warning">
+              ⚠️ Khoá được lưu trong <code>localStorage</code> của trình duyệt bạn và đi kèm mỗi yêu cầu gửi từ trình duyệt,
+              nên bất kỳ ai mở trang cũng có thể đọc được. Vì vậy <strong>bắt buộc</strong> giới hạn khoá theo domain
+              và chỉ cho phép Places API. Đừng dùng khoá không giới hạn.
+            </p>
+          </details>
+        </div>
       </div>
     </div>
   </div>

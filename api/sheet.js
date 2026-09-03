@@ -30,9 +30,11 @@
 
 "use strict";
 
-const MAX_BODY_BYTES = 1024 * 1024;  // 1 MB, thừa sức cho vài nghìn quán
+// 4 MB: đủ cho vài nghìn quán, và cho một tấm ảnh đã thu nhỏ ở dạng base64
+// (trình duyệt tự ép xuống dưới ~900 KB trước khi gửi — xem shrinkImageFile).
+const MAX_BODY_BYTES = 4 * 1024 * 1024;
 const MAX_ITEMS = 1000;              // chặn một lần đẩy quá lớn làm Apps Script hết giờ
-const ALLOWED_ACTIONS = new Set(["pull", "push", "delete", "health"]);
+const ALLOWED_ACTIONS = new Set(["pull", "push", "delete", "health", "photo", "deletePhoto"]);
 
 // Apps Script Web App chỉ sống ở hai domain này. Kiểm tra để một biến môi
 // trường bị đặt sai (hoặc bị sửa) không biến endpoint thành proxy tuỳ ý.
@@ -219,9 +221,28 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ ok: false, error: "delete nhưng không có id nào." });
   }
 
+  // Ảnh: chỉ chuyển tiếp đúng data URL của ảnh, không phải chuỗi tuỳ ý
+  const dataUrl = typeof body.dataUrl === "string" ? body.dataUrl : "";
+  if (action === "photo" && !/^data:image\/[a-z+]+;base64,/.test(dataUrl)) {
+    return res.status(400).json({ ok: false, error: "photo nhưng dataUrl không phải ảnh base64." });
+  }
+  const fileId = String(body.fileId || "").trim();
+  if (action === "deletePhoto" && !fileId) {
+    return res.status(400).json({ ok: false, error: "deletePhoto nhưng thiếu fileId." });
+  }
+
   try {
     // token được ghép ở đây — client không bao giờ nhìn thấy nó
-    const result = await callAppsScript(webhookUrl, { token, action, places, ids });
+    const payload = { token, action };
+    if (action === "push") payload.places = places;
+    if (action === "delete") payload.ids = ids;
+    if (action === "photo") {
+      payload.dataUrl = dataUrl;
+      payload.placeId = String(body.placeId || "").slice(0, 100);
+    }
+    if (action === "deletePhoto") payload.fileId = fileId;
+
+    const result = await callAppsScript(webhookUrl, payload);
 
     if (!result || result.ok !== true) {
       return res.status(502).json({

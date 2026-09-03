@@ -2076,3 +2076,67 @@ body {
 .settings-steps li {
   margin-bottom: 6px;
 }
+
+/* ===================================================================
+   Ô ẢNH QUÁN TRONG FORM
+   =================================================================== */
+
+.photo-field {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.photo-preview {
+  width: 92px;
+  height: 92px;
+  flex: 0 0 auto;
+  object-fit: cover;
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+}
+
+.photo-controls {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.btn-photo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border-radius: var(--border-radius-pill);
+  border: 1px dashed var(--primary);
+  background: var(--primary-light);
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 0.86rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn-photo:hover:not(:disabled) {
+  background: var(--primary);
+  border-style: solid;
+  color: #fff;
+}
+
+.btn-photo:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.photo-hint {
+  margin: 7px 0 0;
+  font-size: 0.79rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  /* Thông báo lỗi có thể dài — cho xuống dòng thay vì tràn ra ngoài modal */
+  overflow-wrap: anywhere;
+}
+
+.photo-hint.ok  { color: var(--accent-green); }
+.photo-hint.err { color: var(--accent-orange); }

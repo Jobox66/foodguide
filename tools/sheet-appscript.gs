@@ -28,6 +28,10 @@
  *     "Nâng cao (Advanced)" → "Chuyển đến … (unsafe)". Cảnh báo đó xuất hiện
  *     vì script chưa qua kiểm duyệt của Google, mà script này là của chính bạn.
  *
+ *     Script xin HAI quyền: Bảng tính (ghi danh sách quán) và Drive (lưu ảnh
+ *     quán bạn chụp, xem phần cuối file). Nếu bạn đã cài bản cũ chưa có phần
+ *     ảnh thì phải deploy lại một lần để Google hỏi thêm quyền Drive.
+ *
  *  6. Copy đường dẫn Web App hiện ra, dạng:
  *       https://script.google.com/macros/s/AKfycb.../exec
  *
@@ -117,11 +121,13 @@ function doPost(e) {
 
   try {
     switch (body.action) {
-      case 'health': return jsonOut_({ ok: true, sheet: SHEET_NAME, rows: countPlaces_() });
-      case 'pull':   return jsonOut_({ ok: true, places: readAll_() });
-      case 'push':   return jsonOut_(upsertMany_(body.places || []));
-      case 'delete': return jsonOut_(deleteMany_(body.ids || []));
-      default:       return jsonOut_({ ok: false, error: 'action không hợp lệ: ' + body.action });
+      case 'health':      return jsonOut_({ ok: true, sheet: SHEET_NAME, rows: countPlaces_(), photos: true });
+      case 'pull':        return jsonOut_({ ok: true, places: readAll_() });
+      case 'push':        return jsonOut_(upsertMany_(body.places || []));
+      case 'delete':      return jsonOut_(deleteMany_(body.ids || []));
+      case 'photo':       return jsonOut_(savePhoto_(body));
+      case 'deletePhoto': return jsonOut_(deletePhoto_(body.fileId));
+      default:            return jsonOut_({ ok: false, error: 'action không hợp lệ: ' + body.action });
     }
   } catch (err) {
     return jsonOut_({ ok: false, error: String((err && err.message) || err) });
@@ -326,4 +332,95 @@ function deleteMany_(ids) {
   });
 
   return { ok: true, deleted: rowNumbers.length, total: countPlaces_() };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ẢNH QUÁN TRONG GOOGLE DRIVE
+
+   Ảnh bạn chụp được lưu vào một thư mục Drive của chính bạn, rồi trang web
+   hiển thị qua /api/photo — endpoint đó cache ở edge của Vercel nên Drive chỉ
+   bị gọi một lần cho mỗi ảnh. Xem ghi chú đầu file api/photo.js.
+
+   ⚠️ PHẦN NÀY CẦN QUYỀN TRUY CẬP DRIVE.
+      Nếu bạn đã deploy script trước khi có đoạn này, phải deploy lại một lần
+      (Triển khai → Quản lý triển khai → bút chì → Phiên bản: Mới) và Google
+      sẽ hỏi cấp quyền lại. Không làm bước đó thì tải ảnh sẽ báo lỗi quyền.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Tên thư mục chứa ảnh trong Drive. Đổi thoải mái, script tự tạo nếu chưa có. */
+var PHOTO_FOLDER_NAME = 'Foodguide - Ảnh quán';
+
+/** Chỉ nhận đúng ba định dạng ảnh phổ biến */
+var PHOTO_MIME_EXT = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp'
+};
+
+function getPhotoFolder_() {
+  var found = DriveApp.getFoldersByName(PHOTO_FOLDER_NAME);
+  return found.hasNext() ? found.next() : DriveApp.createFolder(PHOTO_FOLDER_NAME);
+}
+
+/**
+ * Nhận ảnh dạng data URL từ trình duyệt, lưu thành file trong Drive,
+ * trả về id để trang web dựng link /api/photo?id=…
+ */
+function savePhoto_(body) {
+  var dataUrl = String(body.dataUrl || '');
+  var match = dataUrl.match(/^data:(image\/[a-z+]+);base64,([A-Za-z0-9+/=\s]+)$/);
+  if (!match) {
+    return { ok: false, error: 'Dữ liệu ảnh không hợp lệ.' };
+  }
+
+  var mime = match[1];
+  var ext = PHOTO_MIME_EXT[mime];
+  if (!ext) {
+    return { ok: false, error: 'Chỉ nhận ảnh JPG, PNG hoặc WebP. Nhận được: ' + mime };
+  }
+
+  var bytes;
+  try {
+    bytes = Utilities.base64Decode(match[2].replace(/\s/g, ''));
+  } catch (err) {
+    return { ok: false, error: 'Không giải mã được ảnh.' };
+  }
+
+  // Tên file mang theo id quán để bạn mở Drive ra vẫn biết ảnh của quán nào
+  var slug = String(body.placeId || 'quan').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) || 'quan';
+  var name = slug + '-' + Date.now() + '.' + ext;
+
+  var file;
+  try {
+    file = getPhotoFolder_().createFile(Utilities.newBlob(bytes, mime, name));
+  } catch (err) {
+    return { ok: false, error: 'Không ghi được vào Drive: ' + err.message +
+      ' (thường là do chưa deploy lại script sau khi thêm phần ảnh)' };
+  }
+
+  // /api/photo đọc ảnh mà không mang theo token nào, nên file phải mở theo link.
+  // Id của Drive dài và ngẫu nhiên nên không đoán được.
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (err) {
+    file.setTrashed(true);
+    return { ok: false, error: 'Không đặt được quyền xem cho ảnh: ' + err.message +
+      ' (tài khoản công ty thường chặn chia sẻ ra ngoài — hãy dùng tài khoản Gmail cá nhân)' };
+  }
+
+  return { ok: true, fileId: file.getId(), name: name, bytes: bytes.length };
+}
+
+/** Xoá một ảnh khỏi Drive (đưa vào thùng rác, vẫn khôi phục được trong 30 ngày) */
+function deletePhoto_(fileId) {
+  var id = String(fileId || '').trim();
+  if (!id) return { ok: false, error: 'Thiếu fileId.' };
+
+  try {
+    DriveApp.getFileById(id).setTrashed(true);
+    return { ok: true, deleted: id };
+  } catch (err) {
+    // Ảnh đã bị xoá tay từ trước thì coi như xong, không phải lỗi
+    return { ok: true, deleted: id, note: 'Không tìm thấy file, có thể đã xoá: ' + err.message };
+  }
 }

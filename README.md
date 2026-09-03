@@ -24,6 +24,7 @@ Website tổng hợp, tuyển chọn và đánh giá các quán ăn, quán cà p
 5. **Quản lý dữ liệu**
    - Thêm / sửa / xoá quán ngay trên giao diện, lưu vào `LocalStorage`.
    - ☁️ **Đồng bộ Google Sheet** — mỗi thay đổi tự ghi lên Sheet cá nhân của bạn. Xem [mục bên dưới](#️-đồng-bộ-google-sheet).
+   - 📷 **Ảnh thật của quán** — chụp bằng điện thoại, tải thẳng lên Drive của bạn ngay trong form.
    - 📊 **Xuất CSV** (UTF-8 BOM) mở thẳng bằng Google Sheets / Excel không lỗi tiếng Việt.
 
 6. **Responsive & Dark Mode** — tối ưu mobile-first, có thanh điều hướng dưới cho điện thoại.
@@ -169,6 +170,31 @@ Sheets API cần khoá OAuth hoặc file khoá service account — nhiều thứ
 
 ---
 
+## 📷 Ảnh quán
+
+Ảnh bạn chụp tại quán đi vào **Google Drive của chính bạn**, qua đúng Apps Script đã nối ở trên. Trong form Thêm/Sửa quán bấm **📷 Tải ảnh lên** — làm được ngay trên điện thoại.
+
+```
+điện thoại ──► thu nhỏ còn 1400px trong trình duyệt (~200KB thay vì 4MB)
+           ──► POST /api/sheet {action:"photo"}   ← token ghép ở máy chủ
+           ──► Apps Script ──► Drive/Foodguide - Ảnh quán/
+           ──► Sheet cột Ảnh = /api/photo?id=<fileId>
+```
+
+### Vì sao không trỏ thẳng `<img>` vào Drive
+
+Link ảnh của Drive bị chặn tốc độ khi một trang tải hơn ~10 ảnh cùng lúc — đúng tình huống lưới thẻ quán. [`api/photo.js`](api/photo.js) đặt `Cache-Control: immutable` nên CDN của Vercel giữ ảnh ở edge một năm: **Drive chỉ bị gọi một lần cho mỗi ảnh ở mỗi khu vực**, các lượt xem sau không chạm tới Google. Kèm theo, link ảnh nằm trên domain của bạn nên đổi chỗ chứa sau này không phải sửa dữ liệu đã lưu.
+
+Ảnh có hai cỡ: `w=600` cho thẻ quán, `w=1200` cho ảnh lớn trong modal — mỗi ảnh vì vậy chỉ sinh hai mục cache.
+
+### Lưu ý
+
+- **Cần quyền Drive.** Nếu bạn đã cài Apps Script trước khi có phần này, phải **deploy lại một lần** để Google hỏi thêm quyền — xem ghi chú đầu [`tools/sheet-appscript.gs`](tools/sheet-appscript.gs).
+- File ảnh được đặt *ai có link cũng xem được* (id của Drive dài và ngẫu nhiên nên không đoán được). Tài khoản công ty thường chặn chia sẻ ra ngoài — dùng Gmail cá nhân.
+- Ảnh Unsplash dựng sẵn vẫn ở lại làm nền tạm; quán nào bạn tải ảnh thật lên thì ảnh thật đè lên.
+
+---
+
 ## 🚀 Chạy thử trên máy
 
 | Cách | Lệnh | Có `/api/place` & `/api/sheet`? |
@@ -243,7 +269,8 @@ foodguide/
 │   └── app.js              # Logic phía client: render, lọc, autofill, quản lý
 ├── api/
 │   ├── place.js            # Serverless function - giải mã link rút gọn
-│   └── sheet.js            # Serverless function - cầu nối tới Google Sheet
+│   ├── sheet.js            # Serverless function - cầu nối tới Google Sheet
+│   └── photo.js            # Serverless function - phục vụ ảnh Drive, cache ở edge
 ├── tools/
 │   └── sheet-appscript.gs  # Dán vào Apps Script của Sheet bạn muốn dùng
 ├── vercel.json             # Cấu hình Vercel

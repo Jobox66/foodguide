@@ -308,8 +308,16 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="newPlaceImage">Link hình ảnh món ăn (Tùy chọn)</label>
-            <input type="url" id="newPlaceImage" class="form-input" placeholder="https://images.unsplash.com/...">
+            <label class="form-label" for="newPlaceImage">Ảnh quán</label>
+            <div class="photo-field">
+              <img id="newPlacePhotoPreview" class="photo-preview" alt="" hidden>
+              <div class="photo-controls">
+                <button type="button" id="newPlacePhotoBtn" class="btn-photo">📷 Tải ảnh lên</button>
+                <input type="file" id="newPlacePhotoFile" accept="image/*" hidden>
+                <p id="newPlacePhotoHint" class="photo-hint">Chụp tại quán rồi tải lên, ảnh vào Drive của bạn.</p>
+              </div>
+            </div>
+            <input type="url" id="newPlaceImage" class="form-input" placeholder="hoặc dán link ảnh có sẵn">
           </div>
 
           <input type="hidden" id="newPlaceDataSource" value="manual">
@@ -493,8 +501,16 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="editPlaceImage">Link hình ảnh món ăn</label>
-            <input type="url" id="editPlaceImage" class="form-input">
+            <label class="form-label" for="editPlaceImage">Ảnh quán</label>
+            <div class="photo-field">
+              <img id="editPlacePhotoPreview" class="photo-preview" alt="" hidden>
+              <div class="photo-controls">
+                <button type="button" id="editPlacePhotoBtn" class="btn-photo">📷 Tải ảnh lên</button>
+                <input type="file" id="editPlacePhotoFile" accept="image/*" hidden>
+                <p id="editPlacePhotoHint" class="photo-hint">Chụp tại quán rồi tải lên, ảnh vào Drive của bạn.</p>
+              </div>
+            </div>
+            <input type="url" id="editPlaceImage" class="form-input" placeholder="hoặc dán link ảnh có sẵn">
           </div>
 
           <label class="verify-checkbox">

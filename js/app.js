@@ -480,6 +480,13 @@ function setupEventListeners() {
     elements.addPlaceForm.addEventListener("submit", handleAddPlaceSubmit);
   }
 
+  // Tải ảnh quán lên Drive
+  attachPhotoUploader("newPlace", () => "");
+  attachPhotoUploader("editPlace", () => {
+    const idField = document.getElementById("editPlaceId");
+    return idField ? idField.value : "";
+  });
+
   // Đồng bộ Google Sheet
   if (elements.btnSyncSheet) {
     elements.btnSyncSheet.addEventListener("click", syncWithSheet);
@@ -877,7 +884,7 @@ function renderPlaces() {
     html += `
       <div class="place-card" data-id="${escapeHtml(place.id)}">
         <div class="place-image-wrapper">
-          <img src="${escapeHtml(place.image || FALLBACK_IMG)}"
+          <img src="${escapeHtml(photoSrc(place.image, 600) || FALLBACK_IMG)}"
                alt="${escapeHtml(place.name)}"
                class="place-img"
                loading="lazy"
@@ -954,7 +961,7 @@ function openPlaceDetailModal(placeId) {
   const missing = '<span class="value-missing">Chưa có dữ liệu</span>';
 
   elements.placeModalContent.innerHTML = `
-    <img src="${escapeHtml(place.image || FALLBACK_IMG)}"
+    <img src="${escapeHtml(photoSrc(place.image, 1200) || FALLBACK_IMG)}"
          alt="${escapeHtml(place.name)}"
          class="modal-hero-img"
          onerror="this.onerror=null;this.src='${FALLBACK_IMG}'">
@@ -1033,6 +1040,7 @@ function openAddPlaceModal() {
   if (elements.quickMapsUrlInput) elements.quickMapsUrlInput.value = "";
   const sourceField = document.getElementById("newPlaceDataSource");
   if (sourceField) sourceField.value = "manual";
+  resetPhotoField("newPlace", "");
 
   // Danh mục — có lựa chọn trống để không bị gán bừa khi chưa nhận diện được
   const catSelect = document.getElementById("newPlaceCategory");
@@ -1799,6 +1807,212 @@ function updateSheetButton() {
 }
 
 /* ===================================================================
+   ẢNH QUÁN — CHỤP RỒI TẢI LÊN
+
+   Ảnh đi vào Drive của chính bạn qua Apps Script, rồi trang hiển thị qua
+   /api/photo (cache ở edge — xem ghi chú đầu file api/photo.js).
+
+   Thu nhỏ ngay trong trình duyệt trước khi gửi. Ảnh điện thoại bây giờ
+   thường 3–6 MB, mà thẻ quán chỉ hiển thị vài trăm pixel — gửi nguyên bản
+   thì chậm, tốn dung lượng Drive, và vượt giới hạn body của máy chủ.
+   =================================================================== */
+
+const PHOTO_MAX_DIM = 1400;                 // bề dài nhất sau khi thu nhỏ
+const PHOTO_MAX_PAYLOAD = 900 * 1024;       // trần cho chuỗi base64 gửi lên
+const PHOTO_URL_PREFIX = "/api/photo?id=";
+
+/**
+ * Giải mã file ảnh, ưu tiên createImageBitmap để ảnh dọc chụp bằng điện thoại
+ * không bị xoay ngang — thẻ EXIF Orientation chỉ được tôn trọng khi khai báo
+ * imageOrientation: "from-image".
+ */
+async function decodeImageFile(file) {
+  if (typeof createImageBitmap === "function") {
+    try {
+      return await createImageBitmap(file, { imageOrientation: "from-image" });
+    } catch (e) {
+      // Trình duyệt cũ không nhận tuỳ chọn này — dùng cách dưới
+    }
+  }
+
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Không đọc được file."));
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(file);
+  });
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onerror = () => reject(new Error("Không mở được ảnh."));
+    img.onload = () => resolve(img);
+    img.src = dataUrl;
+  });
+}
+
+/** File ảnh → chuỗi data URL đã thu nhỏ, đủ nhỏ để gửi qua máy chủ */
+async function shrinkImageFile(file) {
+  if (!file || !/^image\//.test(file.type || "")) {
+    throw new Error("File này không phải ảnh.");
+  }
+
+  const source = await decodeImageFile(file);
+  const width = source.width;
+  const height = source.height;
+  if (!width || !height) throw new Error("Ảnh hỏng hoặc rỗng.");
+
+  const scale = Math.min(1, PHOTO_MAX_DIM / Math.max(width, height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(height * scale);
+
+  const ctx = canvas.getContext("2d");
+  // Nền trắng để ảnh PNG trong suốt không thành đen sau khi đổi sang JPEG
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  if (typeof source.close === "function") source.close();
+
+  let quality = 0.82;
+  let dataUrl = canvas.toDataURL("image/jpeg", quality);
+  while (dataUrl.length > PHOTO_MAX_PAYLOAD && quality > 0.4) {
+    quality -= 0.12;
+    dataUrl = canvas.toDataURL("image/jpeg", quality);
+  }
+
+  if (dataUrl.length > PHOTO_MAX_PAYLOAD) {
+    throw new Error("Ảnh vẫn quá nặng sau khi thu nhỏ, thử ảnh khác.");
+  }
+  return dataUrl;
+}
+
+/** Gửi ảnh lên Drive, trả về đường dẫn để lưu vào trường image */
+async function uploadPhotoDataUrl(placeId, dataUrl) {
+  const json = await callSheetApi({ action: "photo", placeId: placeId || "", dataUrl }, 90000);
+  if (!json.fileId) throw new Error("Máy chủ không trả về id ảnh.");
+  return PHOTO_URL_PREFIX + encodeURIComponent(json.fileId);
+}
+
+/** Ảnh này có phải ảnh mình tự tải lên không (để hiện nhãn trong form) */
+function isUploadedPhoto(url) {
+  return typeof url === "string" && url.indexOf(PHOTO_URL_PREFIX) === 0;
+}
+
+/**
+ * Chọn cỡ ảnh theo chỗ hiển thị. Chỉ áp cho ảnh tự tải lên — /api/photo nhận
+ * đúng hai bề ngang nên mỗi ảnh chỉ sinh hai mục cache. Link ảnh dán từ ngoài
+ * thì giữ nguyên, không đụng vào.
+ */
+function photoSrc(url, width) {
+  if (!url) return "";
+  if (!isUploadedPhoto(url)) return url;
+  return url + "&w=" + (width === 1200 ? "1200" : "600");
+}
+
+/**
+ * Gắn nút tải ảnh cho một form.
+ * prefix là "newPlace" hoặc "editPlace" — các id trong HTML theo đúng quy ước đó.
+ */
+function attachPhotoUploader(prefix, getPlaceId) {
+  const urlInput = document.getElementById(prefix + "Image");
+  const fileInput = document.getElementById(prefix + "PhotoFile");
+  const button = document.getElementById(prefix + "PhotoBtn");
+  const hint = document.getElementById(prefix + "PhotoHint");
+  const preview = document.getElementById(prefix + "PhotoPreview");
+  if (!urlInput || !fileInput || !button) return;
+
+  const setHint = (text, kind) => {
+    if (!hint) return;
+    hint.textContent = text;
+    hint.className = "photo-hint" + (kind ? " " + kind : "");
+  };
+
+  const refreshPreview = () => {
+    if (!preview) return;
+    const value = urlInput.value.trim();
+    if (!value) {
+      preview.hidden = true;
+      preview.removeAttribute("src");
+      return;
+    }
+    preview.src = value;
+    preview.hidden = false;
+  };
+
+  button.addEventListener("click", () => fileInput.click());
+  urlInput.addEventListener("input", refreshPreview);
+  urlInput.addEventListener("change", refreshPreview);
+
+  if (preview) {
+    preview.addEventListener("error", () => {
+      preview.hidden = true;
+      setHint("⚠️ Link ảnh này không tải được.", "err");
+    });
+    preview.addEventListener("load", () => { preview.hidden = false; });
+  }
+
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files && fileInput.files[0];
+    fileInput.value = ""; // chọn lại đúng file đó vẫn kích hoạt sự kiện
+    if (!file) return;
+
+    if (!state.sheetStatus.configured) {
+      setHint("⚠️ Chưa nối Google Sheet nên chưa có chỗ chứa ảnh. Mở 🔌 để cài.", "err");
+      return;
+    }
+
+    button.disabled = true;
+    const originalLabel = button.textContent;
+    button.textContent = "⏳ Đang tải lên...";
+    setHint("Đang thu nhỏ và gửi ảnh lên Drive của bạn…", "");
+
+    try {
+      const dataUrl = await shrinkImageFile(file);
+      const url = await uploadPhotoDataUrl(getPlaceId ? getPlaceId() : "", dataUrl);
+
+      urlInput.value = url;
+      refreshPreview();
+      const kb = Math.round((dataUrl.length * 3) / 4 / 1024);
+      setHint(`✅ Đã lưu vào Drive (${kb} KB). Nhớ bấm Lưu để ghi vào cẩm nang.`, "ok");
+    } catch (e) {
+      setHint("⚠️ Tải ảnh thất bại: " + e.message, "err");
+    } finally {
+      button.disabled = false;
+      button.textContent = originalLabel;
+    }
+  });
+
+  // Gọi một lần để form mở ra đã đúng trạng thái
+  refreshPreview();
+}
+
+/** Đặt lại ô ảnh khi mở form (dùng chung cho cả thêm mới lẫn sửa) */
+function resetPhotoField(prefix, value) {
+  const urlInput = document.getElementById(prefix + "Image");
+  const hint = document.getElementById(prefix + "PhotoHint");
+  const preview = document.getElementById(prefix + "PhotoPreview");
+
+  if (urlInput) urlInput.value = value || "";
+  if (hint) {
+    hint.className = "photo-hint";
+    hint.textContent = isUploadedPhoto(value)
+      ? "Ảnh bạn đã tải lên Drive."
+      : value
+        ? "Đang dùng ảnh minh hoạ — tải ảnh thật lên để thay."
+        : "Chụp tại quán rồi tải lên, ảnh vào Drive của bạn.";
+  }
+  if (preview) {
+    if (value) {
+      preview.src = value;
+      preview.hidden = false;
+    } else {
+      preview.hidden = true;
+      preview.removeAttribute("src");
+    }
+  }
+}
+
+/* ===================================================================
    Ô NHẬP ĐIỂM GOOGLE MAPS
 
    Số sao và lượt đánh giá là hai trường duy nhất phải nhập tay, nên đây
@@ -2342,7 +2556,7 @@ function renderManagerTable() {
     html += `
       <tr>
         <td>
-          <img src="${escapeHtml(p.image || FALLBACK_THUMB)}" alt="${escapeHtml(p.name)}" class="manager-thumb"
+          <img src="${escapeHtml(photoSrc(p.image, 600) || FALLBACK_THUMB)}" alt="${escapeHtml(p.name)}" class="manager-thumb" loading="lazy"
                onerror="this.onerror=null;this.src='${FALLBACK_THUMB}'">
         </td>
         <td>
@@ -2430,7 +2644,7 @@ function openEditPlaceModal(placeId) {
   document.getElementById("editPlaceMustTry").value = place.mustTry || "";
   document.getElementById("editPlaceReview").value = place.review || "";
   document.getElementById("editPlaceTags").value = (place.tags || []).join(", ");
-  document.getElementById("editPlaceImage").value = place.image || "";
+  resetPhotoField("editPlace", place.image);
 
   const verifiedBox = document.getElementById("editPlaceVerified");
   if (verifiedBox) verifiedBox.checked = place.verified === true;

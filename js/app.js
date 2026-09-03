@@ -1923,27 +1923,48 @@ async function shrinkImageFile(file) {
  * Ba lỗi hay gặp nhất đều nằm ở phía Google chứ không phải ở trang, và thông
  * báo gốc ("action không hợp lệ: photo") không nói được phải sửa ở đâu.
  */
-function explainPhotoError(message) {
-  const text = String(message || "");
-
-  if (/action không hợp lệ/i.test(text)) {
-    return "Apps Script đang chạy bản cũ chưa có phần ảnh. Dán lại tools/sheet-appscript.gs, " +
-      "rồi Triển khai → Quản lý triển khai → bút chì → Phiên bản: Mới → Triển khai. " +
-      "Chỉ bấm Lưu là chưa đủ.";
+function photoErrorHint(text) {
+  // Quy tắc hẹp đặt trước quy tắc rộng. Lỗi chính sách chia sẻ có chữ "quyền"
+  // và thường kèm chữ "Drive", nên nếu để sau quy tắc quyền chung thì nó bị
+  // nuốt và người dùng đi cấp quyền — trong khi bệnh nằm ở chỗ khác hẳn.
+  if (/Không đặt được quyền xem/i.test(text)) {
+    return "Tài khoản này bị chặn chia sẻ file ra ngoài (hay gặp ở tài khoản công ty). " +
+      "Dùng Sheet trên một tài khoản Gmail cá nhân.";
   }
-  if (/DriveApp|không được xác định|is not defined|Drive/i.test(text) && /quyền|permission|authoriz/i.test(text)) {
-    return "Apps Script chưa được cấp quyền Drive. Deploy lại một lần để Google hỏi cấp quyền.";
+  if (/action không hợp lệ/i.test(text)) {
+    return "Apps Script đang chạy bản cũ chưa có phần ảnh. Dán lại tools/sheet-appscript.gs " +
+      "rồi Triển khai → Quản lý triển khai → bút chì → Phiên bản: Mới.";
+  }
+  if (/doGet/i.test(text)) {
+    return "Kiểm tra SHEETS_WEBHOOK_URL trên Vercel có đúng đường dẫn /exec mới nhất không.";
+  }
+  if (/permission|quyền|authoriz|scope/i.test(text) && /Drive/i.test(text)) {
+    return "Mở Apps Script, chọn hàm CAP_QUYEN_LAN_DAU rồi bấm ▶ Chạy và đồng ý cấp quyền. " +
+      "Deploy KHÔNG làm Google hỏi cấp quyền — phải chạy tay một lần.";
   }
   if (/đăng nhập|Sign in/i.test(text)) {
-    return 'Web App đang đòi đăng nhập. Deploy lại với "Ai có quyền truy cập: Bất kỳ ai".';
+    return 'Deploy lại với "Ai có quyền truy cập: Bất kỳ ai".';
   }
   if (/quá lớn|413/i.test(text)) {
-    return "Ảnh quá nặng so với giới hạn máy chủ. Thử ảnh khác hoặc chụp lại ở độ phân giải thấp hơn.";
+    return "Thử ảnh khác hoặc chụp lại ở độ phân giải thấp hơn.";
   }
   if (/Sheet đang bận/i.test(text)) {
-    return "Apps Script đang bận vì một lượt đồng bộ khác. Đợi vài giây rồi thử lại.";
+    return "Đợi vài giây rồi thử lại.";
   }
-  return text;
+  return "";
+}
+
+/**
+ * Giữ NGUYÊN VĂN câu máy chủ trả về, rồi mới nối thêm gợi ý cách sửa.
+ *
+ * Bản trước thay hẳn câu gốc bằng bản dịch. Khi luật đoán sai, người dùng đi
+ * sửa nhầm chỗ mà không còn cách nào biết Google thực sự đã nói gì — đúng thứ
+ * làm mất thời gian nhất khi gỡ lỗi.
+ */
+function explainPhotoError(message) {
+  const text = String(message || "");
+  const hint = photoErrorHint(text);
+  return hint ? text + " → " + hint : text;
 }
 
 /** Gửi ảnh lên Drive, trả về đường dẫn để lưu vào trường image */

@@ -492,3 +492,40 @@ function deletePhoto_(fileId) {
     return { ok: true, deleted: id, note: 'Không tìm thấy file, có thể đã xoá: ' + err.message };
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ▶ CHẠY HÀM NÀY MỘT LẦN SAU KHI DÁN SCRIPT
+
+   Vì sao cần: Deploy KHÔNG làm Google hỏi cấp quyền. Web App chạy bằng bộ
+   quyền đã lưu từ lần bạn bấm "Đồng ý" gần nhất. Nếu lần đó script chưa có
+   phần Drive, thì mọi lần tải ảnh đều lỗi "không có quyền gọi DriveApp" —
+   và deploy lại bao nhiêu lần cũng không sửa được, vì deploy không đụng tới
+   phần cấp quyền.
+
+   Chỉ khi bạn CHẠY TAY một hàm có dùng tới Drive thì Google mới hiện lại hộp
+   thoại xin quyền. Đó là việc của hàm này.
+
+   Cách chạy:
+     1. Trong trình soạn thảo Apps Script, chọn "CAP_QUYEN_LAN_DAU" ở ô
+        danh sách hàm phía trên.
+     2. Bấm nút ▶ Chạy (Run).
+     3. Google hiện hộp thoại xin quyền → Nâng cao → Chuyển đến… (unsafe) →
+        Cho phép. Lần này danh sách quyền phải có cả Google Drive.
+     4. Xem khung Nhật ký (Execution log) bên dưới, phải ra dòng bắt đầu bằng
+        "OK." kèm tên Sheet và tên thư mục ảnh.
+
+   Sau đó mới cần deploy. Nếu vẫn lỗi quyền, mở Project Settings, bật
+   "Show appsscript.json", kiểm tra oauthScopes có .../auth/drive không.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function CAP_QUYEN_LAN_DAU() {
+  var sheet = getSheet_();          // xin quyền Bảng tính
+  var folder = getPhotoFolder_();   // xin quyền Drive
+
+  var message = 'OK. Sheet: "' + sheet.getName() + '" (' + countPlaces_() + ' quán). ' +
+                'Thư mục ảnh: "' + folder.getName() + '". ' +
+                'Đã có đủ quyền Bảng tính và Drive — giờ deploy lại là dùng được.';
+
+  Logger.log(message);
+  return message;
+}

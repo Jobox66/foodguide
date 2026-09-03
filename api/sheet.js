@@ -36,6 +36,11 @@ const MAX_BODY_BYTES = 4 * 1024 * 1024;
 const MAX_ITEMS = 1000;              // chặn một lần đẩy quá lớn làm Apps Script hết giờ
 const ALLOWED_ACTIONS = new Set(["pull", "push", "delete", "health", "photo", "deletePhoto"]);
 
+// Tool crawl ghi vào Crawl_Inbox để bạn duyệt tay; trang web dùng tab chính.
+// Chốt danh sách ở đây nữa (Apps Script cũng chốt) để một tham số bịa không
+// tạo ra tab lạ trong Sheet của bạn.
+const ALLOWED_SHEETS = new Set(["FoodGuide", "Crawl_Inbox"]);
+
 // Apps Script Web App chỉ sống ở hai domain này. Kiểm tra để một biến môi
 // trường bị đặt sai (hoặc bị sửa) không biến endpoint thành proxy tuỳ ý.
 const ALLOWED_WEBHOOK_HOSTS = new Set(["script.google.com", "script.googleusercontent.com"]);
@@ -270,6 +275,14 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ ok: false, error: 'action không hợp lệ: "' + action + '".' });
   }
 
+  const sheet = String(body.sheet || "").trim();
+  if (sheet && !ALLOWED_SHEETS.has(sheet)) {
+    return res.status(400).json({
+      ok: false,
+      error: `Tab không được phép: "${sheet}". Chỉ nhận ${[...ALLOWED_SHEETS].join(" hoặc ")}.`
+    });
+  }
+
   const places = Array.isArray(body.places) ? body.places : [];
   const ids = Array.isArray(body.ids) ? body.ids : [];
 
@@ -299,6 +312,7 @@ module.exports = async function handler(req, res) {
   try {
     // token được ghép ở đây — client không bao giờ nhìn thấy nó
     const payload = { token, action };
+    if (sheet) payload.sheet = sheet;
     if (action === "push") payload.places = places;
     if (action === "delete") payload.ids = ids;
     if (action === "photo") {

@@ -4,6 +4,27 @@ Tài liệu này ghi lại toàn bộ chiến lược, kiến trúc và quy trì
 
 ---
 
+> **Cập nhật sau khi kiểm chứng & triển khai** — tài liệu gốc giữ nguyên bên dưới,
+> nhưng bốn điểm sau đã được sửa khi làm thật. Xem [`crawler/README.md`](crawler/README.md).
+>
+> | Kế hoạch gốc | Thực tế |
+> |---|---|
+> | Michelin "HTML tĩnh, không bị chặn", dùng `requests` + BeautifulSoup | Sai. Trang có **AWS WAF** với thử thách JS — `curl` nhận HTTP 202, 0 link quán. Phải dùng Playwright, nên Bước 1 **không** nhanh hơn Bước 3. |
+> | Bước 4 Cách 2: `POST /api/sheet` với `action: "push"` | Ghi thẳng vào tab **FoodGuide**, phá đúng cơ chế duyệt 2 tab. Đã thêm tham số `sheet` để đẩy vào `Crawl_Inbox`. |
+> | `category`: `"Phở & Bún"`, `"Cà phê & Trà"` | App lọc theo **id** (`mon-soi`, `cafe-chill`). Ghi tên hiển thị thì quán biến mất khỏi bộ lọc. |
+> | `priceLevel`: `$` / `$$` / `$$$` | App dùng `low` / `mid` / `high`. |
+>
+> Ba trường khác cũng đổi vì mâu thuẫn với nguyên tắc của chính dự án:
+> `rating` **không** gán mặc định 4.2–5.0 (bịa số), `verified` **không** tự bật cho Michelin
+> (nhãn đó nghĩa là bạn tự đối chiếu), `image` **không** hotlink ảnh bài viết
+> (bản quyền, và link CDN hết hạn sau vài ngày).
+>
+> Prompt AI cũng sửa: trả về **mảng** (một bài có thể nhiều quán), **cấm suy đoán**,
+> và dùng **structured output** thay vì bóc ```json bằng tay.
+
+---
+
+
 ## 1. Tổng quan kiến trúc hệ thống
 
 ```mermaid

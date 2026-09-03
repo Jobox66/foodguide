@@ -1,7 +1,8 @@
-requests>=2.31.0
-beautifulsoup4>=4.12.3
-playwright>=1.40.0
-google-genai>=0.1.1
-gspread>=6.0.0
-python-dotenv>=1.0.0
-pydantic>=2.5.0
+# Bước 2 — cào Michelin (cần trình duyệt thật vì trang có AWS WAF)
+playwright>=1.48
+
+# Bước 3 — làm sạch văn bản tự do bằng Gemini
+google-genai>=1.0
+
+# Sau khi pip install, còn một bước nữa:
+#     python -m playwright install chromium

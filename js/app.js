@@ -79,6 +79,61 @@ function safeParse(raw, fallback) {
  * Chuẩn hoá một quán. Thiếu dữ liệu thì để null (hiển thị "—"),
  * tuyệt đối không sinh giá trị giả để lấp chỗ trống.
  */
+/* ───────────────────────────────────────────────────────────────────
+   Hai trường dưới đây điều khiển bộ lọc, nên giá trị lạ không chỉ hiển
+   thị sai mà làm quán biến mất khỏi kết quả lọc. Dữ liệu vào cẩm nang
+   giờ có nhiều đường (nhập tay, Google Sheet, tool crawl), nên phải
+   chuẩn hoá ngay tại cửa thay vì tin nguồn gửi tới.
+   ─────────────────────────────────────────────────────────────────── */
+
+const PRICE_LEVELS = new Set(["low", "mid", "high"]);
+
+/** Các cách viết mức giá hay gặp, quy về đúng ba giá trị bộ lọc dùng */
+const PRICE_LEVEL_ALIASES = {
+  "$": "low", "$$": "mid", "$$$": "high", "$$$$": "high",
+  "binh dan": "low", "re": "low", "cheap": "low", "budget": "low",
+  "trung binh": "mid", "vua phai": "mid", "moderate": "mid",
+  "cao cap": "high", "dat": "high", "expensive": "high", "sang trong": "high"
+};
+
+/**
+ * Đưa danh mục về đúng id. Chấp nhận cả tên hiển thị ("Cà phê & Trà") vì
+ * người nhập tay trong Sheet và AI parser đều hay ghi tên thay vì id.
+ * Không nhận ra thì trả rỗng — quán vẫn hiện ở "Tất cả", chỉ là chưa xếp
+ * danh mục. Thà để trống còn hơn gán bừa vào một danh mục sai.
+ */
+function normalizeCategoryId(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  const real = INITIAL_CATEGORIES.filter(c => c.id !== "all");
+  if (real.some(c => c.id === raw)) return raw;
+
+  const target = normalizeVi(raw);
+  const byName = real.find(c => normalizeVi(c.name) === target || normalizeVi(c.id) === target);
+  if (byName) return byName.id;
+
+  // Tên đầy đủ dài hơn cách người ta thường gọi ("Ăn vặt" so với
+  // "Ăn vặt & Tráng miệng"), nên thử khớp một phần — nhưng CHỈ nhận khi đúng
+  // một danh mục khớp. Hai kết quả trở lên nghĩa là mập mờ, và đoán bừa lúc đó
+  // còn tệ hơn để trống.
+  if (target.length < 3) return "";
+
+  const hits = real.filter(c => {
+    const name = normalizeVi(c.name);
+    return name.indexOf(target) !== -1 || target.indexOf(name) !== -1;
+  });
+  return hits.length === 1 ? hits[0].id : "";
+}
+
+/** Mức giá về low | mid | high, hoặc rỗng nếu không hiểu */
+function normalizePriceLevel(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (PRICE_LEVELS.has(raw)) return raw;
+  return PRICE_LEVEL_ALIASES[raw] || PRICE_LEVEL_ALIASES[normalizeVi(raw)] || "";
+}
+
 function normalizePlace(place) {
   const rating = Number(place.rating);
   const reviewCount = Number(place.reviewCount);
@@ -88,6 +143,8 @@ function normalizePlace(place) {
     reviewCount: Number.isFinite(reviewCount) && reviewCount > 0 ? Math.round(reviewCount) : null,
     tags: Array.isArray(place.tags) ? place.tags : [],
     district: place.district || "",
+    category: normalizeCategoryId(place.category),
+    priceLevel: normalizePriceLevel(place.priceLevel),
     dataSource: place.dataSource || "seed",
     verified: place.verified === true
   };

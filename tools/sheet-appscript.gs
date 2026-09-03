@@ -53,8 +53,21 @@
 /** Chuỗi bí mật — ĐỔI THÀNH CỦA BẠN, và điền y hệt vào SHEETS_TOKEN trên Vercel */
 var SHEET_TOKEN = 'doi-chuoi-nay-thanh-cua-ban';
 
-/** Tên tab trong Sheet. Script tự tạo nếu chưa có. */
+/** Tên tab chính thức — dữ liệu ở đây mới lên trang web. Script tự tạo nếu chưa có. */
 var SHEET_NAME = 'FoodGuide';
+
+/**
+ * Tab chờ duyệt: nơi tool crawl đổ dữ liệu về.
+ * Quán cào bằng máy KHÔNG được ghi thẳng vào tab chính — bạn xem qua rồi tick
+ * cột "Duyệt", sau đó dùng menu 🍜 FoodGuide → Duyệt các quán đã tick.
+ */
+var INBOX_SHEET_NAME = 'Crawl_Inbox';
+var INBOX_APPROVE_LABEL = 'Duyệt';
+
+/** Chỉ hai tab này được ghi qua API — chặn việc tạo tab bừa bãi từ bên ngoài */
+var ALLOWED_SHEETS = {};
+ALLOWED_SHEETS[SHEET_NAME] = true;
+ALLOWED_SHEETS[INBOX_SHEET_NAME] = true;
 
 /**
  * Thứ tự cột trong Sheet. Đổi label thoải mái (chỉ là chữ ở hàng tiêu đề),
@@ -123,6 +136,14 @@ function doPost(e) {
     return jsonOut_({ ok: false, error: 'Sai token — SHEETS_TOKEN trên Vercel chưa trùng SHEET_TOKEN trong Apps Script.' });
   }
 
+  // Tool crawl ghi vào Crawl_Inbox, trang web ghi vào FoodGuide
+  var sheetName;
+  try {
+    sheetName = resolveSheetName_(body.sheet);
+  } catch (err) {
+    return jsonOut_({ ok: false, error: err.message });
+  }
+
   // Khoá chỉ để hai lượt GHI SHEET không đè lên nhau. Thao tác ảnh chỉ đụng
   // Drive, không chạm một ô nào của Sheet — bắt nó xếp hàng chờ tới 20 giây sau
   // một lượt đồng bộ dài là vô ích, và đó chính là cách nhanh nhất để vượt quá
@@ -149,10 +170,11 @@ function doPost(e) {
 
   try {
     switch (body.action) {
-      case 'health':      return tag({ ok: true, sheet: SHEET_NAME, rows: countPlaces_(), photos: true });
-      case 'pull':        return tag({ ok: true, places: readAll_() });
-      case 'push':        return tag(upsertMany_(body.places || []));
-      case 'delete':      return tag(deleteMany_(body.ids || []));
+      case 'health':      return tag({ ok: true, sheet: sheetName, rows: countPlaces_(sheetName),
+                                        inboxRows: countInboxRows_(), photos: true, inbox: true });
+      case 'pull':        return tag({ ok: true, places: readAll_(sheetName) });
+      case 'push':        return tag(upsertMany_(body.places || [], sheetName));
+      case 'delete':      return tag(deleteMany_(body.ids || [], sheetName));
       case 'photo':       return tag(savePhoto_(body));
       case 'deletePhoto': return tag(deletePhoto_(body.fileId));
       default:            return tag({ ok: false, error: 'action không hợp lệ: ' + body.action });
@@ -174,30 +196,56 @@ function jsonOut_(obj) {
    TRUY CẬP SHEET
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/** Lấy tab dữ liệu, tự tạo kèm hàng tiêu đề nếu chưa có */
-function getSheet_() {
+/** Tên tab hợp lệ, hoặc ném lỗi. Bỏ trống thì hiểu là tab chính. */
+function resolveSheetName_(requested) {
+  var name = String(requested || '').trim();
+  if (!name) return SHEET_NAME;
+  if (ALLOWED_SHEETS[name] !== true) {
+    throw new Error('Tab không được phép ghi: "' + name + '". Chỉ nhận ' +
+      SHEET_NAME + ' hoặc ' + INBOX_SHEET_NAME + '.');
+  }
+  return name;
+}
+
+/** Lấy một tab dữ liệu, tự tạo kèm hàng tiêu đề nếu chưa có */
+function getSheet_(sheetName) {
+  var name = sheetName || SHEET_NAME;
   var book = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = book.getSheetByName(SHEET_NAME);
+  var sheet = book.getSheetByName(name);
 
   if (!sheet) {
-    sheet = book.insertSheet(SHEET_NAME);
+    sheet = book.insertSheet(name);
   }
 
   if (sheet.getLastRow() === 0) {
+    var isInbox = (name === INBOX_SHEET_NAME);
     var labels = COLUMNS.map(function (c) { return c.label; });
+    if (isInbox) labels.push(INBOX_APPROVE_LABEL);
+
     sheet.getRange(1, 1, 1, labels.length).setValues([labels])
       .setFontWeight('bold')
-      .setBackground('#f1f3f4');
+      .setBackground(isInbox ? '#FFF4E5' : '#f1f3f4');
     sheet.setFrozenRows(1);
     sheet.setColumnWidth(1, 170);  // ID
     sheet.setColumnWidth(2, 220);  // Tên quán
+
+    if (isInbox) {
+      // Ô tick sẵn để duyệt bằng một chạm, kể cả trên điện thoại
+      sheet.getRange(2, COLUMNS.length + 1, 1000, 1).insertCheckboxes();
+    }
   }
 
   return sheet;
 }
 
-function countPlaces_() {
-  return Math.max(0, getSheet_().getLastRow() - 1);
+function countPlaces_(sheetName) {
+  return Math.max(0, getSheet_(sheetName).getLastRow() - 1);
+}
+
+/** Đếm số dòng trong tab chờ duyệt, KHÔNG tạo tab nếu chưa có */
+function countInboxRows_() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(INBOX_SHEET_NAME);
+  return sheet ? Math.max(0, sheet.getLastRow() - 1) : 0;
 }
 
 /** id → số dòng thật trong Sheet */
@@ -296,8 +344,8 @@ function rowToPlace_(row) {
    BA THAO TÁC
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function readAll_() {
-  var sheet = getSheet_();
+function readAll_(sheetName) {
+  var sheet = getSheet_(sheetName);
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
@@ -312,8 +360,8 @@ function readAll_() {
  * Thêm mới hoặc cập nhật theo ID.
  * Quán đã có → ghi đè đúng dòng đó. Quán chưa có → nối vào cuối.
  */
-function upsertMany_(places) {
-  var sheet = getSheet_();
+function upsertMany_(places, sheetName) {
+  var sheet = getSheet_(sheetName);
   var index = buildRowIndex_(sheet);
 
   var updated = 0;
@@ -342,12 +390,12 @@ function upsertMany_(places) {
       .setValues(appendRows);
   }
 
-  return { ok: true, added: appendRows.length, updated: updated, total: countPlaces_() };
+  return { ok: true, added: appendRows.length, updated: updated, total: countPlaces_(sheetName) };
 }
 
 /** Xoá theo ID. Xoá từ dòng dưới lên để số dòng phía trên không bị dịch. */
-function deleteMany_(ids) {
-  var sheet = getSheet_();
+function deleteMany_(ids, sheetName) {
+  var sheet = getSheet_(sheetName);
   var index = buildRowIndex_(sheet);
 
   var rowNumbers = ids
@@ -359,7 +407,7 @@ function deleteMany_(ids) {
     sheet.deleteRow(rowNumber);
   });
 
-  return { ok: true, deleted: rowNumbers.length, total: countPlaces_() };
+  return { ok: true, deleted: rowNumbers.length, total: countPlaces_(sheetName) };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -551,4 +599,74 @@ function CAP_QUYEN_LAN_DAU() {
 
   Logger.log(message);
   return message;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DUYỆT QUÁN TỪ TAB CRAWL_INBOX
+
+   Tool crawl không được ghi thẳng vào tab chính. Nó đổ vào Crawl_Inbox, bạn
+   lướt xem, tick cột "Duyệt" ở những quán ưng ý, rồi dùng menu để đưa sang.
+
+   Menu 🍜 FoodGuide hiện ngay trên thanh công cụ của Sheet, dùng được cả trên
+   app điện thoại.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('🍜 FoodGuide')
+    .addItem('✅ Duyệt các quán đã tick', 'DUYET_INBOX')
+    .addSeparator()
+    .addItem('🔑 Cấp quyền lần đầu', 'CAP_QUYEN_LAN_DAU')
+    .addToUi();
+}
+
+function DUYET_INBOX() {
+  var ui = SpreadsheetApp.getUi();
+  var inbox = getSheet_(INBOX_SHEET_NAME);
+  var lastRow = inbox.getLastRow();
+
+  if (lastRow < 2) {
+    ui.alert('Tab ' + INBOX_SHEET_NAME + ' đang trống, chưa có quán nào để duyệt.');
+    return;
+  }
+
+  var approveCol = COLUMNS.length + 1;
+  var values = inbox.getRange(2, 1, lastRow - 1, approveCol).getValues();
+
+  var approved = [];
+  var rowsToRemove = [];
+  var skippedBadRows = 0;
+
+  values.forEach(function (row, i) {
+    if (!toBool_(row[approveCol - 1])) return;
+
+    var place = rowToPlace_(row);
+    if (!place.id || !place.name) {
+      skippedBadRows++;
+      return;
+    }
+    approved.push(place);
+    rowsToRemove.push(i + 2);
+  });
+
+  if (approved.length === 0) {
+    ui.alert('Chưa tick quán nào ở cột "' + INBOX_APPROVE_LABEL + '".' +
+      (skippedBadRows > 0 ? '\n\n' + skippedBadRows + ' dòng đã tick nhưng thiếu ID hoặc Tên quán nên bỏ qua.' : ''));
+    return;
+  }
+
+  var result = upsertMany_(approved, SHEET_NAME);
+
+  // Xoá từ dòng dưới lên để số dòng phía trên không bị dịch
+  rowsToRemove
+    .sort(function (a, b) { return b - a; })
+    .forEach(function (rowNumber) { inbox.deleteRow(rowNumber); });
+
+  ui.alert(
+    'Đã duyệt ' + approved.length + ' quán sang tab ' + SHEET_NAME + '.\n\n' +
+    '• Thêm mới: ' + result.added + '\n' +
+    '• Cập nhật quán đã có: ' + result.updated + '\n' +
+    '• Còn lại trong ' + INBOX_SHEET_NAME + ': ' + countInboxRows_() +
+    (skippedBadRows > 0 ? '\n\nBỏ qua ' + skippedBadRows + ' dòng thiếu ID hoặc Tên quán.' : '')
+  );
 }

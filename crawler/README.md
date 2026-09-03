@@ -1,79 +1,80 @@
-# FOODGUIDE CRAWLER - HƯỚNG DẪN SỬ DỤNG VỚI `uv`
+# Tool crawl → Crawl_Inbox
 
-Hệ sinh thái tự động thu thập và làm sạch dữ liệu quán ăn/uống cho **FoodGuide**:
-- **Bước 1**: Cào danh sách chuẩn từ **Michelin Guide Vietnam** (Hà Nội, TP.HCM, Đà Nẵng).
-- **Bước 2**: Cào bài review chia sẻ "quán ruột" trên **Threads** bằng Playwright.
-- **Bước 3**: Bóc tách bài review tự do thành bảng 21 cột chuẩn bằng **Google Gemini Flash AI**.
-- **Bước 4**: Tự động sao lưu ngoại tuyến (`.json`, `.csv`) và đồng bộ lên **Google Sheets**.
+Cào dữ liệu quán, chuẩn hoá, đẩy vào tab **`Crawl_Inbox`** của Google Sheet để bạn duyệt tay trước khi lên cẩm nang.
 
----
-
-## 1. Cài đặt môi trường ảo với `uv`
-
-Nếu máy bạn chưa có `uv`, cài nhanh bằng lệnh PowerShell:
-```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+Michelin ─┐
+          ├─► schema.to_place() ─► /api/sheet (sheet=Crawl_Inbox) ─► bạn tick "Duyệt" ─► tab FoodGuide ─► web
+Bài viết ─┘        (chuẩn hoá)          (không cần service account)      (menu 🍜 trong Sheet)
 ```
 
-### Khởi tạo môi trường ảo và cài đặt thư viện:
-Di chuyển vào thư mục `crawler`:
-```powershell
-cd d:\1.tangocduc\Code\foodguide\crawler
+## Cài
+
+```bash
+pip install -r crawler/requirements.txt
+python -m playwright install chromium
+
+cp crawler/.env.example crawler/.env    # rồi điền FOODGUIDE_API và GEMINI_API_KEY
 ```
 
-Dùng `uv` để đồng bộ thư viện từ `pyproject.toml`:
-```powershell
-uv sync
-```
-*(Nếu cần cài thêm Playwright browser cho Bước 2 cào Threads):*
-```powershell
-uv run playwright install chromium
-```
+## Dùng
 
----
-
-## 2. Cấu hình biến môi trường (`.env`)
-
-Tạo file `.env` từ file mẫu `.env.example`:
-```powershell
-copy .env.example .env
+```bash
+python crawler/run.py check                    # máy chủ sống chưa, đã nối Sheet chưa
+python crawler/run.py michelin                 # cào, lưu ra out/michelin.json — CHƯA đẩy
+python crawler/run.py michelin --show          # cào và xem trình duyệt chạy (gỡ lỗi)
+python crawler/run.py push out/michelin.json   # xem file thấy ổn rồi mới đẩy
+python crawler/run.py parse bai-viet.txt       # văn bản tự do → JSON qua Gemini
 ```
 
-Mở file `.env` và điền:
-1. **`GEMINI_API_KEY`**: Lấy miễn phí tại [Google AI Studio](https://aistudio.google.com/) (Dùng cho Bước 3 AI phân tích).
-2. **`SHEETS_WEBHOOK_URL`** & **`SHEETS_TOKEN`**: Link Webhook và Token từ file `sheet-appscript.gs` của bạn (Dùng cho Bước 4 tự động đồng bộ vào Sheet).
+Mặc định **không đẩy thẳng**. Bạn xem file JSON trước, thấy ổn mới `push`.
 
----
+Sau khi đẩy: mở Sheet → tab `Crawl_Inbox` → tick cột **Duyệt** ở những quán ưng ý → menu **🍜 FoodGuide → Duyệt các quán đã tick**.
 
-## 3. Các lệnh chạy cơ bản
+## Ba quy tắc trong `schema.py`
 
-`uv run` sẽ tự động kích hoạt môi trường ảo mà bạn không cần phải `activate` thủ công:
+Đây là phần quan trọng nhất của gói này, và là chỗ khác nhiều nhất so với kế hoạch ban đầu trong [`../crawl.md`](../crawl.md).
 
-### A. Chỉ cào danh sách nhà hàng Michelin Guide VN:
-```powershell
-uv run main.py --source michelin --max-pages 2 --dry-run
+| | Vì sao |
+|---|---|
+| **`rating` luôn `None`** | Kế hoạch cũ định gán mặc định 4.2–5.0. Đó là bịa số — con số hiện cạnh ngôi sao, người đọc tin là thật. Michelin cũng không chấm thang 1–5, họ có Sao / Bib Gourmand / Selected; hạng đó đi vào `tags`. |
+| **`verified` luôn `False`** | Nhãn "Đã xác minh" trong cẩm nang nghĩa là *bạn* đã tự đối chiếu Google Maps. Máy không làm thay được, bật sẵn là làm nhãn mất nghĩa. |
+| **`image` luôn rỗng** | Ảnh Michelin có bản quyền. Ảnh mạng xã hội nằm trên CDN có chữ ký, hết hạn sau vài ngày là gãy. Chụp ảnh thật rồi tải lên qua nút 📷 trong trang. |
+
+Thêm hai chỗ nữa phải đúng, nếu sai thì quán cào về **biến mất khỏi bộ lọc**:
+
+- `category` phải là **id** (`cafe-chill`), không phải tên hiển thị (`Cà phê & Trà`)
+- `priceLevel` phải là `low` / `mid` / `high`, không phải `$` / `$$` / `$$$`
+
+`js/app.js` cũng chuẩn hoá lại hai trường này khi nhận dữ liệu, nên đây là hai lớp bảo vệ độc lập.
+
+## Michelin: cần trình duyệt thật
+
+Kế hoạch ban đầu ghi Michelin "render HTML tĩnh, dễ crawl, không bị chặn". Kiểm tra thực tế thì ngược lại:
+
 ```
-*(Bỏ `--dry-run` nếu muốn đồng bộ ngay vào Google Sheet)*
-
-### B. Chỉ cào bài review trên Threads + Phân tích bằng Gemini AI:
-```powershell
-uv run main.py --source threads --query "quán ngon hà nội" --max-posts 10 --dry-run
+curl + User-Agent trình duyệt       → HTTP 202, 0 byte
+curl + đủ header như trình duyệt    → HTTP 202, 2012 byte:
+    window.awsWafCookieDomainList = [];
+    window.gokuProps = {"key":"AQIDAHjcYu/GjX+Qlghic..."}
 ```
 
-Nếu muốn hiển thị cửa sổ trình duyệt để quan sát Playwright cuộn trang:
-```powershell
-uv run main.py --source threads --query "quán ngon sài gòn" --no-headless
-```
+AWS WAF với thử thách JavaScript. `requests` + BeautifulSoup nhận đúng trang thử thách, **0 link quán**. Nên bước này không nhanh hơn bước cào mạng xã hội như kế hoạch giả định.
 
-### C. Chạy toàn bộ pipeline (Michelin + Threads + AI + Đồng bộ):
-```powershell
-uv run main.py --source all
-```
+**Giới hạn tự đặt trong `michelin.py`:**
 
----
+- Chỉ đi đường phân trang thuần `/page/N`. `robots.txt` của Michelin cấm mọi URL có tham số lọc / sắp xếp / toạ độ (`*sort=*`, `*?region=`, `*/search?`, `*lat=*`, `*/restaurantlist?`).
+- Nghỉ 3 giây giữa các trang (`CRAWL_DELAY`).
+- Trình duyệt bình thường: **không** plugin giấu dấu vết, **không** xoay proxy, **không** giải captcha. Michelin vẫn chặn thì đó là họ từ chối — dừng lại, đừng lách thêm.
 
-## 4. Dữ liệu đầu ra (Output)
+## Chưa kiểm được gì
 
-Mỗi lần chạy, dữ liệu sẽ tự động được lưu vào thư mục `crawler/output/`:
-- File **`.json`**: Chứa toàn bộ mảng dữ liệu có cấu trúc.
-- File **`.csv`**: Bạn có thể mở trực tiếp bằng Microsoft Excel để xem, lọc hoặc copy paste thủ công bất kỳ lúc nào.
+`schema.py`, `ai_parser.py` (schema + prompt), `sync.py` đã có 50 test tự động chạy được không cần mạng — gồm cả test đối chiếu id danh mục giữa Python và `js/data.js`, để hai bên không lệch nhau.
+
+**`michelin.py` chưa chạy thật lần nào** vì Playwright chưa được cài trong môi trường này. Bộ chọn (selector) dựa trên cấu trúc `a[href*="/restaurant/"]` — nhiều khả năng đúng, nhưng phải chạy `python crawler/run.py michelin --show` một lần để xem và chỉnh lại nếu Michelin đổi giao diện.
+
+## Threads
+
+Chưa làm, và đang nằm ở cuối hàng đợi có chủ đích. Điều khoản của Meta cấm thu thập tự động; đây cũng là chặng cho dữ liệu bẩn nhất (văn bản tự do, phải qua AI mới dùng được) trong khi rủi ro cao nhất. Làm ba phần trên chạy ổn đã.
+
+Hướng rẻ hơn nhiều cho cùng mục đích: lưu quán vào một **danh sách trên Google Maps** khi đi đường, rồi dùng Google Takeout xuất CSV (Title + URL). Không WAF, không chống bot, không vướng điều khoản — vì đó là dữ liệu của chính bạn, do Google cung cấp công cụ xuất. Mỗi URL đưa qua `/api/place` là ra tên, địa chỉ, quận, toạ độ.

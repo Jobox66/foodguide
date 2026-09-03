@@ -9,3 +9,8 @@
 # Node
 node_modules/
 npm-debug.log*
+
+# Tool crawl
+crawler/.env
+crawler/out/
+crawler/__pycache__/

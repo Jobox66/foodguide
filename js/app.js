@@ -16,7 +16,7 @@ const state = {
   sortBy: "featured",
   viewMode: "explorer", // 'explorer' (thẻ chi tiết) hoặc 'portal' (danh mục bio)
   deletedIds: new Set(),
-  backendStatus: { online: false, hasKey: false },
+  backendStatus: { online: false },
   theme: "light"
 };
 
@@ -430,6 +430,10 @@ function setupEventListeners() {
   if (elements.managerDistrictFilter) {
     elements.managerDistrictFilter.addEventListener("change", renderManagerTable);
   }
+
+  // Ô Điểm nhận thẳng cụm "4,6 (228)" copy từ Google Maps
+  attachRatingParser("newPlaceRating", "newPlaceReviewCount");
+  attachRatingParser("editPlaceRating", "editPlaceReviewCount");
 
   // Form chỉnh sửa quán
   if (elements.editPlaceForm) {
@@ -1051,19 +1055,17 @@ function openAddPlaceModal() {
 function updateMagicKeyHint() {
   if (!elements.magicKeyHint) return;
 
-  const { online, hasKey } = state.backendStatus;
-  if (hasKey) {
+  // Máy chủ chạy bình thường thì không cần nhắc gì
+  if (state.backendStatus.online) {
     elements.magicKeyHint.style.display = "none";
     return;
   }
 
   elements.magicKeyHint.style.display = "";
-  elements.magicKeyHint.innerHTML = online
-    ? `🔑 Máy chủ chưa cấu hình khoá Google Places — hiện chỉ lấy được tên &amp; địa chỉ.
-       <a href="javascript:void(0)" onclick="openSettingsModal()">Xem cách cấu hình</a>
-       để lấy thêm số sao, lượt đánh giá, giờ mở cửa và ảnh thật.`
-    : `🔌 Chưa kết nối được máy chủ — link rút gọn có thể không đọc được.
-       <a href="javascript:void(0)" onclick="openSettingsModal()">Kiểm tra cài đặt</a>.`;
+  elements.magicKeyHint.innerHTML =
+    `🔌 Chưa kết nối được máy chủ — link rút gọn <code>maps.app.goo.gl</code> có thể không đọc được.
+     Hãy dán URL đầy đủ trên thanh địa chỉ, hoặc
+     <a href="javascript:void(0)" onclick="openSettingsModal()">kiểm tra cài đặt</a>.`;
 }
 
 // Danh mục dữ liệu nhận diện nhanh 0ms cho các link rút gọn Google Maps đã xác thực
@@ -1423,8 +1425,8 @@ async function checkBackendHealth() {
   const res = await fetch(`${endpoint}${separator}health=1`, { signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`máy chủ trả về ${res.status}`);
 
-  const json = await res.json();
-  return { online: true, hasKey: Boolean(json.hasKey) };
+  await res.json();
+  return { online: true };
 }
 
 /** Nhờ máy chủ giải mã link và tra Google Places */
@@ -1440,6 +1442,129 @@ async function fetchPlaceFromBackend(mapsUrl, hint) {
     throw new Error(json.error || `máy chủ trả về ${res.status}`);
   }
   return json;
+}
+
+/* ===================================================================
+   Ô NHẬP ĐIỂM GOOGLE MAPS
+
+   Số sao và lượt đánh giá là hai trường duy nhất phải nhập tay, nên đây
+   là thao tác lặp lại nhiều nhất khi thêm quán. Google Maps hiển thị hai
+   con số dính liền nhau ("4,6 (228)"), nên ô Điểm nhận luôn cả cụm đó rồi
+   tự tách — đỡ phải gõ vào hai chỗ.
+   =================================================================== */
+
+/**
+ * Tách chuỗi kiểu Google Maps thành điểm và lượt đánh giá.
+ * Chấp nhận: "4,6 (228)" · "4.6 (1.234)" · "4,6 · 228 đánh giá" · "4.6" · "228"
+ * Dấu phẩy là phần thập phân, dấu chấm trong ngoặc là phân cách hàng nghìn — đúng
+ * cách Google Maps hiển thị ở giao diện tiếng Việt.
+ */
+function parseRatingInput(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return { rating: null, reviewCount: null };
+
+  // Lượt đánh giá thường nằm trong ngoặc: (228) hoặc (1.234)
+  let reviewCount = null;
+  const inParens = text.match(/\(([\d.,\s]+)\)/);
+  if (inParens) {
+    const digits = inParens[1].replace(/[^\d]/g, "");
+    if (digits) reviewCount = parseInt(digits, 10);
+  }
+
+  // Điểm là số đầu tiên, dấu phẩy hoặc chấm đều là phần thập phân
+  let rating = null;
+  const head = inParens ? text.slice(0, inParens.index) : text;
+  const ratingMatch = head.match(/(\d)[.,](\d)/) || head.match(/(?:^|\s)([1-5])(?:\s|$)/);
+  if (ratingMatch) {
+    rating = ratingMatch[2] !== undefined
+      ? parseFloat(`${ratingMatch[1]}.${ratingMatch[2]}`)
+      : parseFloat(ratingMatch[1]);
+  }
+
+  // Không có ngoặc: số thứ hai (nếu có) được coi là lượt đánh giá
+  if (reviewCount === null && !inParens) {
+    const numbers = text.match(/\d[\d.,]*/g) || [];
+    if (numbers.length >= 2) {
+      const digits = numbers[1].replace(/[^\d]/g, "");
+      if (digits) reviewCount = parseInt(digits, 10);
+    } else if (numbers.length === 1 && rating === null) {
+      // Chỉ một số và không phải điểm (ví dụ "228") thì là lượt đánh giá
+      const digits = numbers[0].replace(/[^\d]/g, "");
+      if (digits && parseInt(digits, 10) > 5) reviewCount = parseInt(digits, 10);
+    }
+  }
+
+  if (rating !== null && (rating < 1 || rating > 5)) rating = null;
+  return { rating, reviewCount };
+}
+
+/**
+ * Gắn khả năng tách tự động cho một cặp ô Điểm / Lượt đánh giá.
+ * Chỉ tách khi người dùng gõ thứ gì đó phức tạp hơn một số đơn thuần,
+ * để không cản trở việc gõ tay từng ô.
+ */
+function attachRatingParser(ratingId, reviewCountId) {
+  const ratingEl = document.getElementById(ratingId);
+  const countEl = document.getElementById(reviewCountId);
+  if (!ratingEl || !countEl) return;
+
+  const split = () => {
+    const raw = ratingEl.value;
+    // "4.6" hoặc "4,6" đơn thuần thì để yên cho người dùng gõ tiếp
+    if (/^\s*\d([.,]\d?)?\s*$/.test(raw)) return;
+
+    const { rating, reviewCount } = parseRatingInput(raw);
+    if (rating === null && reviewCount === null) return;
+
+    if (rating !== null) ratingEl.value = String(rating);
+    if (reviewCount !== null) {
+      countEl.value = String(reviewCount);
+      countEl.classList.add("just-filled");
+      setTimeout(() => countEl.classList.remove("just-filled"), 1200);
+    }
+  };
+
+  ratingEl.addEventListener("paste", () => setTimeout(split, 0));
+  ratingEl.addEventListener("blur", split);
+  ratingEl.addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      split();
+      countEl.focus();
+    }
+  });
+}
+
+/**
+ * Sau khi quét link xong, đưa con trỏ thẳng vào ô Điểm và hiện link mở
+ * quán trên Google Maps để người dùng nhìn con số rồi gõ luôn.
+ */
+function focusRatingInput(mapsUrl) {
+  const ratingEl = document.getElementById("newPlaceRating");
+  const linkEl = document.getElementById("linkOpenPlaceMaps");
+
+  if (linkEl) {
+    if (mapsUrl) {
+      linkEl.href = mapsUrl;
+      linkEl.target = "_blank";
+      linkEl.rel = "noopener";
+      linkEl.hidden = false;
+    } else {
+      linkEl.hidden = true;
+    }
+  }
+
+  if (ratingEl && !ratingEl.value) {
+    // Chỉ là tiện ích con trỏ — không được phép ném lỗi làm hỏng lượt quét
+    try {
+      if (typeof ratingEl.scrollIntoView === "function") {
+        ratingEl.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+      ratingEl.focus();
+    } catch (e) {
+      console.warn("Không đưa được con trỏ vào ô Điểm:", e.message);
+    }
+  }
 }
 
 /** Trạng thái bận của nút Quét & Tự điền */
@@ -1484,6 +1609,7 @@ async function handleMagicAutoFill() {
     .map(line => line.trim())
     .filter(Boolean);
 
+  let scanResultMapsUrl = null;
   const found = {
     name: "", address: "", district: "", category: "",
     lat: null, lng: null, rating: null, reviewCount: null,
@@ -1603,19 +1729,17 @@ async function handleMagicAutoFill() {
     if (found.time) filled.push("giờ mở cửa");
     if (found.image) filled.push("ảnh");
 
-    let message = `🪄 Đã điền: ${filled.join(", ")}.`;
-    if (found.rating === null) {
-      message += backendUsed
-        ? " Chưa lấy được số sao — kiểm tra khoá Places API trên máy chủ hoặc tự nhập."
-        : " Không kết nối được máy chủ nên không lấy được số sao & lượt đánh giá.";
-    }
+    let message = `🪄 Đã điền: ${filled.join(", ")}. Còn điểm Google Maps — mời bạn nhập.`;
     if (notes.length > 0) message += ` (${notes.join("; ")})`;
     showToast(message);
+    scanResultMapsUrl = found.mapsUrl;
   } catch (err) {
     console.error("Lỗi khi quét link:", err);
     showToast("⚠️ Quét thất bại: " + err.message + ". Bạn có thể nhập tay bên dưới.");
   } finally {
     setAutofillBusy(null);
+    // Đặt ngoài khối try: đây là tiện ích con trỏ, không phải một phần của việc quét
+    if (scanResultMapsUrl !== null) focusRatingInput(scanResultMapsUrl);
   }
 }
 
@@ -1673,6 +1797,9 @@ function handleAddPlaceSubmit(e) {
     const num = Number(value);
     return Number.isFinite(num) ? num : null;
   };
+  // Ô Điểm là text để nhận được cụm "4,6 (228)", nên tách lại lần cuối khi lưu
+  const scores = parseRatingInput(readValue("newPlaceRating"));
+  const reviewCountTyped = parseRatingInput(readValue("newPlaceReviewCount")).reviewCount;
 
   const name = readValue("newPlaceName");
   const address = readValue("newPlaceAddress");
@@ -1703,8 +1830,8 @@ function handleAddPlaceSubmit(e) {
     district: readValue("newPlaceDistrict"),
     address,
     mapsUrl: mapsUrlInput || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name + " " + address)}`,
-    rating: readNumber("newPlaceRating"),
-    reviewCount: readNumber("newPlaceReviewCount"),
+    rating: scores.rating,
+    reviewCount: scores.reviewCount !== null ? scores.reviewCount : reviewCountTyped,
     priceRange: readValue("newPlacePrice"),
     priceLevel: readValue("newPlacePriceLevel"),
     time: readValue("newPlaceTime"),
@@ -1991,14 +2118,10 @@ function handleEditPlaceSubmit(e) {
   const district = document.getElementById("editPlaceDistrict").value;
   const address = document.getElementById("editPlaceAddress").value.trim();
   const mapsUrl = document.getElementById("editPlaceMapsUrl").value.trim() || `https://maps.google.com/?q=${encodeURIComponent(name + " " + address)}`;
-  const parseOrNull = value => {
-    const trimmed = String(value).trim();
-    if (trimmed === "") return null;
-    const num = Number(trimmed);
-    return Number.isFinite(num) ? num : null;
-  };
-  const rating = parseOrNull(document.getElementById("editPlaceRating").value);
-  const reviewCount = parseOrNull(document.getElementById("editPlaceReviewCount").value);
+  const editScores = parseRatingInput(document.getElementById("editPlaceRating").value);
+  const editCountTyped = parseRatingInput(document.getElementById("editPlaceReviewCount").value).reviewCount;
+  const rating = editScores.rating;
+  const reviewCount = editScores.reviewCount !== null ? editScores.reviewCount : editCountTyped;
   const verified = Boolean(document.getElementById("editPlaceVerified") && document.getElementById("editPlaceVerified").checked);
   const priceRange = document.getElementById("editPlacePrice").value.trim();
   const priceLevel = document.getElementById("editPlacePriceLevel").value;
@@ -2178,8 +2301,8 @@ async function handleImportFile(event) {
 /* ===================================================================
    CÀI ĐẶT NGUỒN DỮ LIỆU
 
-   Chỉ lưu địa chỉ endpoint. Khoá Google Places nằm trong biến môi trường
-   của máy chủ, phía trình duyệt không bao giờ nhìn thấy nó.
+   Chỉ lưu địa chỉ endpoint. Không có khoá API nào ở phía trình duyệt,
+   cũng không có ở máy chủ — xem ghi chú đầu file api/place.js.
    =================================================================== */
 
 function openSettingsModal() {
@@ -2213,10 +2336,7 @@ function saveSettings() {
   closeAllModals();
 }
 
-/**
- * Hỏi máy chủ xem sống chưa và đã có khoá chưa, rồi hiển thị trạng thái.
- * Kết quả cũng quyết định có hiện dòng nhắc cấu hình ở ô Quét & Tự điền hay không.
- */
+/** Hỏi máy chủ xem đã chạy chưa, rồi hiển thị trạng thái */
 async function refreshBackendStatus() {
   const box = elements.backendStatusBox;
   if (box) {
@@ -2225,22 +2345,18 @@ async function refreshBackendStatus() {
   }
 
   try {
-    const status = await checkBackendHealth();
-    state.backendStatus = status;
-
+    await checkBackendHealth();
+    state.backendStatus = { online: true };
     if (box) {
-      if (status.hasKey) {
-        box.textContent = "🟢 Máy chủ hoạt động và đã cấu hình khoá Google Places — lấy được đầy đủ số sao, lượt đánh giá, giờ mở cửa và ảnh.";
-        box.className = "backend-status ok";
-      } else {
-        box.textContent = "🟡 Máy chủ hoạt động nhưng CHƯA có biến GOOGLE_MAPS_API_KEY — giải mã được link rút gọn, nhưng chưa lấy được số sao và lượt đánh giá.";
-        box.className = "backend-status warn";
-      }
+      box.textContent = "🟢 Máy chủ đang chạy — đọc được cả link rút gọn maps.app.goo.gl.";
+      box.className = "backend-status ok";
     }
   } catch (e) {
-    state.backendStatus = { online: false, hasKey: false };
+    state.backendStatus = { online: false };
     if (box) {
-      box.textContent = "🔴 Chưa kết nối được máy chủ (" + e.message + "). Trang vẫn chạy được nhưng chỉ tra địa chỉ qua OpenStreetMap.";
+      box.textContent = "🔴 Chưa kết nối được máy chủ (" + e.message +
+        "). Trang vẫn dùng được, nhưng link rút gọn có thể không đọc được — " +
+        "hãy dán URL đầy đủ trên thanh địa chỉ trình duyệt.";
       box.className = "backend-status err";
     }
   }
@@ -2258,14 +2374,8 @@ async function testBackend() {
   showSettingsResult("", "");
 
   try {
-    const status = await checkBackendHealth();
-    showSettingsResult(
-      status.hasKey
-        ? "✅ Kết nối thành công và máy chủ đã có khoá Google Places. Bấm Lưu cài đặt để dùng."
-        : "🟡 Kết nối được máy chủ nhưng thiếu biến môi trường GOOGLE_MAPS_API_KEY. " +
-          "Vào Vercel → Settings → Environment Variables để thêm, rồi Redeploy.",
-      status.hasKey ? "ok" : "err"
-    );
+    await checkBackendHealth();
+    showSettingsResult("✅ Kết nối thành công. Bấm Lưu cài đặt để dùng.", "ok");
     await refreshBackendStatus();
   } catch (e) {
     state.settings.apiBaseUrl = previous;

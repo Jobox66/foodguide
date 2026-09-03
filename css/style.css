@@ -1934,3 +1934,68 @@ body {
 [data-theme="dark"] .backend-status.ok { background: rgba(16, 185, 129, 0.12); color: #6EE7B7; }
 [data-theme="dark"] .backend-status.warn { background: rgba(252, 211, 77, 0.12); color: #FCD34D; }
 [data-theme="dark"] .backend-status.err { background: rgba(255, 107, 74, 0.12); color: #FDBA74; }
+
+/* Khối nhập tay điểm Google Maps — thao tác thường xuyên nhất khi thêm quán */
+.manual-entry-box {
+  border: 1.5px solid var(--accent-yellow-hover);
+  background: var(--accent-yellow-light);
+  border-radius: var(--border-radius-md);
+  padding: 12px 14px 10px;
+  margin-bottom: 16px;
+}
+
+[data-theme="dark"] .manual-entry-box {
+  background: rgba(252, 211, 77, 0.08);
+  border-color: rgba(252, 211, 77, 0.3);
+}
+
+.manual-entry-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-bottom: 10px;
+}
+
+.manual-entry-link {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.manual-entry-link:hover { text-decoration: underline; }
+
+.manual-entry-tip {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+.manual-entry-tip code {
+  background: var(--bg-card);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.95em;
+}
+
+.manual-entry-box .form-input.just-filled {
+  border-color: var(--accent-green);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+/* Nguồn dữ liệu phải nhập tay trong modal cài đặt */
+.settings-source-box.settings-manual {
+  border-color: var(--accent-yellow-hover);
+  background: var(--accent-yellow-light);
+}
+
+[data-theme="dark"] .settings-source-box.settings-manual {
+  background: rgba(252, 211, 77, 0.08);
+}

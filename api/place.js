@@ -3,19 +3,28 @@
  *
  * Chạy trên Vercel Serverless Function (Node.js runtime, không cần cài thư viện).
  *
- * Nhiệm vụ:
- *   1. Đi theo redirect của link rút gọn (maps.app.goo.gl / share.google / goo.gl).
- *      Việc này trình duyệt KHÔNG làm được vì bị CORS chặn — đó là lý do
- *      autofill phía client không đọc nổi link rút gọn.
- *   2. Bóc tên quán + toạ độ từ URL đã giải mã.
- *   3. Gọi Google Places API bằng khoá lấy từ biến môi trường.
- *      Khoá nằm trên server, không bao giờ gửi xuống trình duyệt.
- *   4. Trả về JSON đã chuẩn hoá.
+ * NHIỆM VỤ DUY NHẤT: đi theo redirect của link rút gọn (maps.app.goo.gl /
+ * share.google / goo.gl) rồi bóc tên quán + toạ độ ra khỏi URL đích.
+ *
+ * Vì sao phải có máy chủ cho việc này: trình duyệt không tự đi theo redirect
+ * sang google.com được (CORS chặn), nên link rút gọn dán vào form luôn ra rỗng.
+ * Máy chủ không bị giới hạn đó.
+ *
+ * VÌ SAO KHÔNG GỌI GOOGLE PLACES API:
+ *   Places API (New) nằm trong danh sách "Google Maps Core Services", và điều
+ *   khoản Maps Platform §3.2.1(v) cấm phân phối tại Prohibited Territory những
+ *   ứng dụng dùng Core Services. Việt Nam nằm trong danh sách đó
+ *   (cloud.google.com/maps-platform/terms/maps-prohibited-territories).
+ *   Ràng buộc này gắn với ứng dụng và nơi phân phối, không phải loại tài khoản,
+ *   nên tài khoản trả phí cũng không gỡ được. Số sao và lượt đánh giá vì vậy
+ *   được nhập tay trong giao diện.
+ *
+ * Địa chỉ và quận do phía client tra qua Nominatim (OpenStreetMap) từ toạ độ
+ * mà endpoint này trả về — miễn phí và không vướng ràng buộc lãnh thổ.
  *
  * Biến môi trường:
- *   GOOGLE_MAPS_API_KEY   (bắt buộc, để trống thì vẫn trả tên + toạ độ)
- *   ALLOWED_ORIGINS       (tuỳ chọn) danh sách origin cách nhau bởi dấu phẩy
- *                         được phép gọi. Bỏ trống = chỉ cho phép cùng origin.
+ *   ALLOWED_ORIGINS  (tuỳ chọn) danh sách origin cách nhau bởi dấu phẩy được
+ *                    phép gọi. Bỏ trống = chỉ cho phép cùng origin.
  */
 
 "use strict";
@@ -39,14 +48,6 @@ const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
-const GOOGLE_PRICE_LEVEL_MAP = {
-  PRICE_LEVEL_FREE: "low",
-  PRICE_LEVEL_INEXPENSIVE: "low",
-  PRICE_LEVEL_MODERATE: "mid",
-  PRICE_LEVEL_EXPENSIVE: "high",
-  PRICE_LEVEL_VERY_EXPENSIVE: "high"
-};
-
 // ─── Giới hạn tần suất (best-effort) ─────────────────────────────────────────
 // Serverless instance sống ngắn nên bộ nhớ này không bền, chỉ chặn được
 // trường hợp bị gọi dồn dập. Muốn chắc chắn thì phải dùng Vercel KV / Redis.
@@ -68,7 +69,7 @@ function isRateLimited(clientIp) {
   return bucket.count > RATE_LIMIT_MAX;
 }
 
-// ─── Tiện ích bóc dữ liệu từ URL Google Maps ─────────────────────────────────
+// ─── Bóc dữ liệu từ URL Google Maps ──────────────────────────────────────────
 
 function decodeMapsSegment(segment) {
   let out = String(segment).replace(/\+/g, " ");
@@ -149,83 +150,6 @@ function extractPlacePathFromHtml(html) {
   return hit ? "https://www.google.com" + hit[0] : "";
 }
 
-// ─── Google Places API ───────────────────────────────────────────────────────
-
-async function searchGooglePlace(apiKey, { textQuery, lat, lng }) {
-  const body = { textQuery, languageCode: "vi", regionCode: "VN", maxResultCount: 1 };
-  if (lat !== null && lng !== null) {
-    body.locationBias = { circle: { center: { latitude: lat, longitude: lng }, radius: 300 } };
-  }
-
-  // ⚠️ FIELD MASK QUYẾT ĐỊNH GIÁ. Google tính theo SKU CAO NHẤT có trong request.
-  //    rating / userRatingCount / priceLevel / regularOpeningHours đều thuộc nhóm
-  //    Enterprise, nên mỗi lệnh gọi bị tính là Text Search Enterprise:
-  //      - 1.000 lượt miễn phí mỗi tháng (không phải 10.000 như nhóm Essentials)
-  //      - vượt hạn mức: khoảng 35 USD / 1.000 request
-  //    Bỏ bớt 4 trường trên sẽ tụt về Pro (5.000 lượt free) nhưng mất số sao —
-  //    thứ chính mà tính năng này cần. Hãy đặt hạn mức cứng trong Google Cloud
-  //    (Maps Platform → Quotas → Requests per day) thay vì cắt trường.
-  const fieldMask = [
-    "places.id",
-    "places.displayName",
-    "places.formattedAddress",
-    "places.location",
-    "places.rating",
-    "places.userRatingCount",
-    "places.priceLevel",
-    "places.regularOpeningHours.weekdayDescriptions",
-    "places.types",
-    "places.photos",
-    "places.googleMapsUri"
-  ].join(",");
-
-  const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask": fieldMask
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(15000)
-  });
-
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const message = json?.error?.message || `Places API trả về ${res.status}`;
-    const err = new Error(message);
-    err.status = res.status;
-    throw err;
-  }
-  return json.places?.[0] || null;
-}
-
-/**
- * Lấy link ảnh trực tiếp (lh3.googleusercontent.com).
- * skipHttpRedirect=true khiến Google trả JSON chứa photoUri, nhờ vậy
- * khoá API không bị nhúng vào link ảnh gửi xuống trình duyệt.
- */
-// Mỗi lệnh gọi ảnh là một sự kiện Places Photo riêng (~7 USD/1.000, 1.000 lượt free/tháng)
-async function getPhotoUri(apiKey, photoName) {
-  const url =
-    `https://places.googleapis.com/v1/${photoName}/media` +
-    `?maxHeightPx=800&maxWidthPx=1200&skipHttpRedirect=true&key=${encodeURIComponent(apiKey)}`;
-
-  const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
-  if (!res.ok) return "";
-  const json = await res.json().catch(() => ({}));
-  return json.photoUri || "";
-}
-
-function extractTodayOpeningHours(weekdayDescriptions) {
-  if (!Array.isArray(weekdayDescriptions) || weekdayDescriptions.length === 0) return "";
-  // Google xếp mảng bắt đầu từ Thứ Hai, còn getDay() coi 0 là Chủ Nhật
-  const index = (new Date().getDay() + 6) % 7;
-  const line = weekdayDescriptions[index] || weekdayDescriptions[0];
-  const range = line.match(/(\d{1,2}:\d{2})\s*[\u2013\u2014-]\s*(\d{1,2}:\d{2})/);
-  return range ? `${range[1]} - ${range[2]}` : "";
-}
-
 // ─── Kiểm soát truy cập ──────────────────────────────────────────────────────
 
 function resolveCorsOrigin(req) {
@@ -261,12 +185,9 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ ok: false, error: "Chỉ hỗ trợ phương thức GET." });
   }
 
-  const apiKey = (process.env.GOOGLE_MAPS_API_KEY || "").trim();
-
-  // Kiểm tra sức khoẻ: cho phép giao diện biết backend sống chưa & đã có khoá chưa,
-  // mà không tiết lộ bất kỳ phần nào của khoá.
+  // Kiểm tra sức khoẻ: cho giao diện biết máy chủ đã chạy chưa
   if (req.query.health !== undefined) {
-    return res.status(200).json({ ok: true, hasKey: Boolean(apiKey) });
+    return res.status(200).json({ ok: true, service: "maps-link-resolver" });
   }
 
   const clientIp =
@@ -303,22 +224,9 @@ module.exports = async function handler(req, res) {
   }
 
   const notes = [];
-  let found = {
-    name: "",
-    address: "",
-    lat: null,
-    lng: null,
-    rating: null,
-    reviewCount: null,
-    priceLevel: "",
-    time: "",
-    image: "",
-    types: [],
-    mapsUrl: rawUrl
-  };
+  const found = { name: "", address: "", lat: null, lng: null, mapsUrl: rawUrl };
 
   try {
-    // 1. Giải mã link (server đi theo redirect được, trình duyệt thì không)
     let resolvedUrl = rawUrl;
     try {
       const { finalUrl, html } = await resolveMapsUrl(rawUrl);
@@ -344,50 +252,6 @@ module.exports = async function handler(req, res) {
     }
 
     if (!found.name && hint) found.name = hint;
-
-    // 2. Hỏi Google Places để lấy số sao, lượt đánh giá, giờ, ảnh thật
-    if (apiKey && (found.name || found.lat !== null)) {
-      try {
-        const query = found.name || `${found.lat},${found.lng}`;
-        const place = await searchGooglePlace(apiKey, {
-          textQuery: query,
-          lat: found.lat,
-          lng: found.lng
-        });
-
-        if (place) {
-          if (place.displayName?.text) found.name = place.displayName.text;
-          if (place.formattedAddress) found.address = place.formattedAddress;
-          if (place.location) {
-            found.lat = place.location.latitude;
-            found.lng = place.location.longitude;
-          }
-          if (typeof place.rating === "number") found.rating = place.rating;
-          if (typeof place.userRatingCount === "number") found.reviewCount = place.userRatingCount;
-          if (place.priceLevel && GOOGLE_PRICE_LEVEL_MAP[place.priceLevel]) {
-            found.priceLevel = GOOGLE_PRICE_LEVEL_MAP[place.priceLevel];
-          }
-          if (place.regularOpeningHours) {
-            found.time = extractTodayOpeningHours(place.regularOpeningHours.weekdayDescriptions);
-          }
-          if (Array.isArray(place.types)) found.types = place.types;
-          if (place.googleMapsUri) found.mapsUrl = place.googleMapsUri;
-
-          if (place.photos?.length) {
-            const photoUri = await getPhotoUri(apiKey, place.photos[0].name).catch(() => "");
-            if (photoUri) found.image = photoUri;
-          }
-
-          return res.status(200).json({ ok: true, source: "google", place: found, notes });
-        }
-
-        notes.push("Google Places không tìm thấy quán này");
-      } catch (e) {
-        notes.push("Places API: " + e.message);
-      }
-    } else if (!apiKey) {
-      notes.push("server chưa cấu hình GOOGLE_MAPS_API_KEY");
-    }
 
     if (!found.name && found.lat === null) {
       return res.status(200).json({

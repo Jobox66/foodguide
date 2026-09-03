@@ -119,37 +119,25 @@ const APPS_SCRIPT_PHOTO_TIMEOUT_MS = 50000;
 /**
  * Gửi một thao tác xuống Apps Script và trả lại nguyên văn kết quả.
  *
- * VÌ SAO TỰ ĐI THEO REDIRECT:
- *   Apps Script trả 302 sang script.googleusercontent.com — nơi giữ kết quả
- *   thật của lần chạy doPost. Nhưng theo đúng chuẩn, fetch ĐỔI POST THÀNH GET
- *   khi đi theo 301/302. Nếu Location vì lý do nào đó trỏ ngược về /exec thì
- *   cú GET đó chạy doGet(), và doGet cũng trả ok:true — phản hồi trông như
- *   thành công nhưng không có dữ liệu nào cả.
+ * Apps Script trả 302 sang script.googleusercontent.com — nơi giữ kết quả thật
+ * của lần chạy doPost. Để fetch tự đi theo (redirect: "follow"): đường này đã
+ * chạy ổn định cho đồng bộ Sheet, và res.url vẫn cho biết đã đáp xuống đâu.
  *
- *   Tự đi thì biết chính xác đã đáp xuống URL nào, để báo đúng bệnh thay vì
- *   để lỗi trôi xuống tận giao diện dưới dạng "máy chủ không trả về id ảnh".
+ * Đã thử tự đi theo redirect bằng tay để quan sát kỹ hơn, nhưng cú GET tự dựng
+ * lại hay bị googleusercontent trả 404 — địa chỉ đó gắn với phiên của chính lần
+ * chuyển hướng ấy. Việc phát hiện POST bị đổi thành GET không cần tới đó: dấu
+ * 'via' trong phản hồi đã đủ, và chắc chắn hơn.
  */
 async function callAppsScript(webhookUrl, payload, timeoutMs) {
-  const signal = AbortSignal.timeout(timeoutMs || APPS_SCRIPT_TIMEOUT_MS);
-
-  let res = await fetch(webhookUrl, {
+  const res = await fetch(webhookUrl, {
     method: "POST",
-    redirect: "manual",
+    redirect: "follow",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-    signal
+    signal: AbortSignal.timeout(timeoutMs || APPS_SCRIPT_TIMEOUT_MS)
   });
 
-  let finalUrl = webhookUrl;
-  for (let hop = 0; hop < 3 && res.status >= 300 && res.status < 400; hop++) {
-    const location = res.headers.get("location");
-    if (!location) break;
-
-    res.body?.cancel?.();
-    finalUrl = new URL(location, finalUrl).toString();
-    res = await fetch(finalUrl, { method: "GET", redirect: "manual", signal });
-  }
-
+  const finalUrl = res.url || webhookUrl;
   const text = await res.text();
 
   let json;
@@ -157,11 +145,26 @@ async function callAppsScript(webhookUrl, payload, timeoutMs) {
     json = JSON.parse(text);
   } catch {
     // Apps Script trả HTML khi deploy sai quyền hoặc script lỗi cú pháp
-    const needsLogin = /accounts\.google\.com|Sign in|đăng nhập/i.test(text);
-    throw new Error(needsLogin
-      ? 'Web App đang đòi đăng nhập — deploy lại với "Who has access: Anyone".'
-      : "Apps Script trả về nội dung không phải JSON (HTTP " + res.status + " từ " +
-        new URL(finalUrl).hostname + ").");
+    if (/accounts\.google\.com|Sign in|đăng nhập/i.test(text)) {
+      throw new Error('Web App đang đòi đăng nhập — deploy lại với "Who has access: Anyone".');
+    }
+
+    let host = "";
+    try {
+      host = new URL(finalUrl).hostname;
+    } catch {
+      host = "không rõ";
+    }
+
+    if (res.status === 404 && host.indexOf("googleusercontent") !== -1) {
+      throw new Error(
+        "Google trả 404 ở bước lấy kết quả (địa chỉ tạm của Apps Script đã hết hiệu lực). " +
+        "Đây là lỗi chập chờn phía Google, thử lại là thường được."
+      );
+    }
+
+    throw new Error("Apps Script trả về nội dung không phải JSON (HTTP " + res.status +
+      " từ " + host + ").");
   }
 
   json.__finalUrl = finalUrl;

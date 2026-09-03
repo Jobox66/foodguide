@@ -1938,6 +1938,12 @@ function photoErrorHint(text) {
   if (/doGet/i.test(text)) {
     return "Kiểm tra SHEETS_WEBHOOK_URL trên Vercel có đúng đường dẫn /exec mới nhất không.";
   }
+  if (/404/.test(text)) {
+    // Apps Script đã chạy xong rồi mới hỏng ở bước lấy kết quả, nên ảnh
+    // nhiều khả năng đã nằm trong Drive — bấm lại sẽ tạo bản thứ hai.
+    return 'Mở thư mục "Foodguide - Ảnh quán" trong Drive xem ảnh đã lên chưa rồi hãy thử lại, ' +
+      "kẻo có hai bản của cùng một tấm.";
+  }
   if (/permission|quyền|authoriz|scope/i.test(text) && /Drive/i.test(text)) {
     return "Mở Apps Script, chọn hàm CAP_QUYEN_LAN_DAU rồi bấm ▶ Chạy và đồng ý cấp quyền. " +
       "Deploy KHÔNG làm Google hỏi cấp quyền — phải chạy tay một lần.";

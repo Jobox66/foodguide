@@ -116,16 +116,39 @@ function getWebhookUrl() {
 const APPS_SCRIPT_TIMEOUT_MS = 25000;
 const APPS_SCRIPT_PHOTO_TIMEOUT_MS = 50000;
 
-/** Gửi một thao tác xuống Apps Script và trả lại nguyên văn kết quả */
+/**
+ * Gửi một thao tác xuống Apps Script và trả lại nguyên văn kết quả.
+ *
+ * VÌ SAO TỰ ĐI THEO REDIRECT:
+ *   Apps Script trả 302 sang script.googleusercontent.com — nơi giữ kết quả
+ *   thật của lần chạy doPost. Nhưng theo đúng chuẩn, fetch ĐỔI POST THÀNH GET
+ *   khi đi theo 301/302. Nếu Location vì lý do nào đó trỏ ngược về /exec thì
+ *   cú GET đó chạy doGet(), và doGet cũng trả ok:true — phản hồi trông như
+ *   thành công nhưng không có dữ liệu nào cả.
+ *
+ *   Tự đi thì biết chính xác đã đáp xuống URL nào, để báo đúng bệnh thay vì
+ *   để lỗi trôi xuống tận giao diện dưới dạng "máy chủ không trả về id ảnh".
+ */
 async function callAppsScript(webhookUrl, payload, timeoutMs) {
-  const res = await fetch(webhookUrl, {
+  const signal = AbortSignal.timeout(timeoutMs || APPS_SCRIPT_TIMEOUT_MS);
+
+  let res = await fetch(webhookUrl, {
     method: "POST",
-    // Apps Script trả 302 sang script.googleusercontent.com rồi mới có body
-    redirect: "follow",
+    redirect: "manual",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(timeoutMs || APPS_SCRIPT_TIMEOUT_MS)
+    signal
   });
+
+  let finalUrl = webhookUrl;
+  for (let hop = 0; hop < 3 && res.status >= 300 && res.status < 400; hop++) {
+    const location = res.headers.get("location");
+    if (!location) break;
+
+    res.body?.cancel?.();
+    finalUrl = new URL(location, finalUrl).toString();
+    res = await fetch(finalUrl, { method: "GET", redirect: "manual", signal });
+  }
 
   const text = await res.text();
 
@@ -137,10 +160,42 @@ async function callAppsScript(webhookUrl, payload, timeoutMs) {
     const needsLogin = /accounts\.google\.com|Sign in|đăng nhập/i.test(text);
     throw new Error(needsLogin
       ? 'Web App đang đòi đăng nhập — deploy lại với "Who has access: Anyone".'
-      : "Apps Script trả về nội dung không phải JSON.");
+      : "Apps Script trả về nội dung không phải JSON (HTTP " + res.status + " từ " +
+        new URL(finalUrl).hostname + ").");
   }
 
+  json.__finalUrl = finalUrl;
   return json;
+}
+
+/**
+ * Kết quả có đúng là của việc mình vừa nhờ không.
+ * Không kiểm thì một phản hồi lạc — doGet, hay kết quả của action khác — vẫn
+ * lọt qua vì nó cũng có ok:true, và người dùng nhận một lỗi mơ hồ ở tận giao diện.
+ */
+function describeMismatch(action, result) {
+  if (result.via === "doGet" || result.service === "foodguide-sheet") {
+    return 'Yêu cầu POST bị Google chuyển thành GET nên chạy nhầm doGet(). ' +
+      'Thường là do URL trong SHEETS_WEBHOOK_URL không phải bản /exec mới nhất — ' +
+      'vào Apps Script → Triển khai → Quản lý triển khai, copy lại đường dẫn /exec ' +
+      'rồi cập nhật biến môi trường trên Vercel và Redeploy.';
+  }
+
+  if (result.via === "doPost" && result.action && result.action !== action) {
+    return 'Apps Script trả về kết quả của action "' + result.action +
+      '" trong khi mình gửi "' + action + '".';
+  }
+
+  if (action === "photo" && !result.fileId) {
+    return "Apps Script báo thành công nhưng không kèm id ảnh. Nó trả về: " +
+      Object.keys(result).filter(k => k !== "__finalUrl").join(", ") + ".";
+  }
+
+  if (action === "pull" && !Array.isArray(result.places)) {
+    return "Apps Script báo thành công nhưng không kèm danh sách quán.";
+  }
+
+  return "";
 }
 
 module.exports = async function handler(req, res) {
@@ -262,6 +317,13 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    const mismatch = describeMismatch(action, result);
+    if (mismatch) {
+      console.error("[/api/sheet] phản hồi lạc:", action, result.__finalUrl, Object.keys(result));
+      return res.status(502).json({ ok: false, error: mismatch });
+    }
+
+    delete result.__finalUrl; // chỉ dùng để chẩn đoán, không gửi ra trình duyệt
     return res.status(200).json(result);
   } catch (e) {
     console.error("[/api/sheet]", e);

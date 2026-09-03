@@ -96,7 +96,16 @@ var SHEET_ACTIONS = { health: true, pull: true, push: true, 'delete': true };
 function doGet() {
   // Mở đường dẫn /exec bằng trình duyệt sẽ thấy dòng này — dùng để kiểm tra
   // deploy đã đúng quyền chưa. Không trả về dữ liệu quán.
-  return jsonOut_({ ok: true, service: 'foodguide-sheet', hint: 'Web App đang chạy. Trang web gọi bằng POST.' });
+  //
+  // 'via' để máy chủ phân biệt được phản hồi này với phản hồi của doPost. Cả
+  // hai đều có ok:true, nên nếu không đánh dấu thì một cú POST bị đổi thành GET
+  // sẽ lọt qua như thể đã thành công — chỉ thiếu dữ liệu.
+  return jsonOut_({
+    ok: true,
+    via: 'doGet',
+    service: 'foodguide-sheet',
+    hint: 'Web App đang chạy. Trang web gọi bằng POST.'
+  });
 }
 
 function doPost(e) {
@@ -128,15 +137,25 @@ function doPost(e) {
     }
   }
 
+  // Mọi phản hồi của doPost đều mang dấu này, kèm action đã thực sự chạy —
+  // máy chủ nhờ đó biết chắc mình nhận được kết quả của đúng việc mình nhờ.
+  var tag = function (result) {
+    if (result && typeof result === 'object') {
+      result.via = 'doPost';
+      result.action = body.action;
+    }
+    return jsonOut_(result);
+  };
+
   try {
     switch (body.action) {
-      case 'health':      return jsonOut_({ ok: true, sheet: SHEET_NAME, rows: countPlaces_(), photos: true });
-      case 'pull':        return jsonOut_({ ok: true, places: readAll_() });
-      case 'push':        return jsonOut_(upsertMany_(body.places || []));
-      case 'delete':      return jsonOut_(deleteMany_(body.ids || []));
-      case 'photo':       return jsonOut_(savePhoto_(body));
-      case 'deletePhoto': return jsonOut_(deletePhoto_(body.fileId));
-      default:            return jsonOut_({ ok: false, error: 'action không hợp lệ: ' + body.action });
+      case 'health':      return tag({ ok: true, sheet: SHEET_NAME, rows: countPlaces_(), photos: true });
+      case 'pull':        return tag({ ok: true, places: readAll_() });
+      case 'push':        return tag(upsertMany_(body.places || []));
+      case 'delete':      return tag(deleteMany_(body.ids || []));
+      case 'photo':       return tag(savePhoto_(body));
+      case 'deletePhoto': return tag(deletePhoto_(body.fileId));
+      default:            return tag({ ok: false, error: 'action không hợp lệ: ' + body.action });
     }
   } catch (err) {
     return jsonOut_({ ok: false, error: String((err && err.message) || err) });

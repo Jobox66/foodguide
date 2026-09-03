@@ -1595,6 +1595,30 @@ async function refreshSheetStatus() {
   return state.sheetStatus;
 }
 
+/**
+ * Hỏi thẳng Apps Script xem nó đang chạy bản nào.
+ *
+ * /api/sheet?health=1 chỉ cho biết máy chủ đã có đủ biến môi trường chưa — nó
+ * không chạm tới Google. Hàm này đi trọn vòng tới Apps Script, nên phân biệt
+ * được "chưa cấu hình" với "script đang là bản cũ, chưa có phần ảnh". Chỉ gọi
+ * khi mở modal cài đặt, vì mỗi lần đi vòng mất một hai giây.
+ */
+async function checkSheetCapabilities() {
+  try {
+    const json = await callSheetApi({ action: "health" }, 25000);
+    state.sheetStatus.rows = typeof json.rows === "number" ? json.rows : null;
+    state.sheetStatus.photos = json.photos === true;
+    state.sheetStatus.scriptError = "";
+  } catch (e) {
+    state.sheetStatus.rows = null;
+    state.sheetStatus.photos = null;
+    state.sheetStatus.scriptError = e.message;
+  }
+
+  renderSheetSettingsBox();
+  return state.sheetStatus;
+}
+
 function chunk(list, size) {
   const out = [];
   for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
@@ -1886,6 +1910,31 @@ async function shrinkImageFile(file) {
   return dataUrl;
 }
 
+/**
+ * Dịch lỗi kỹ thuật thành việc cần làm.
+ * Ba lỗi hay gặp nhất đều nằm ở phía Google chứ không phải ở trang, và thông
+ * báo gốc ("action không hợp lệ: photo") không nói được phải sửa ở đâu.
+ */
+function explainPhotoError(message) {
+  const text = String(message || "");
+
+  if (/action không hợp lệ/i.test(text)) {
+    return "Apps Script đang chạy bản cũ chưa có phần ảnh. Dán lại tools/sheet-appscript.gs, " +
+      "rồi Triển khai → Quản lý triển khai → bút chì → Phiên bản: Mới → Triển khai. " +
+      "Chỉ bấm Lưu là chưa đủ.";
+  }
+  if (/DriveApp|không được xác định|is not defined|Drive/i.test(text) && /quyền|permission|authoriz/i.test(text)) {
+    return "Apps Script chưa được cấp quyền Drive. Deploy lại một lần để Google hỏi cấp quyền.";
+  }
+  if (/đăng nhập|Sign in/i.test(text)) {
+    return 'Web App đang đòi đăng nhập. Deploy lại với "Ai có quyền truy cập: Bất kỳ ai".';
+  }
+  if (/quá lớn|413/i.test(text)) {
+    return "Ảnh quá nặng so với giới hạn máy chủ. Thử ảnh khác hoặc chụp lại ở độ phân giải thấp hơn.";
+  }
+  return text;
+}
+
 /** Gửi ảnh lên Drive, trả về đường dẫn để lưu vào trường image */
 async function uploadPhotoDataUrl(placeId, dataUrl) {
   const json = await callSheetApi({ action: "photo", placeId: placeId || "", dataUrl }, 90000);
@@ -1975,7 +2024,7 @@ function attachPhotoUploader(prefix, getPlaceId) {
       const kb = Math.round((dataUrl.length * 3) / 4 / 1024);
       setHint(`✅ Đã lưu vào Drive (${kb} KB). Nhớ bấm Lưu để ghi vào cẩm nang.`, "ok");
     } catch (e) {
-      setHint("⚠️ Tải ảnh thất bại: " + e.message, "err");
+      setHint("⚠️ Tải ảnh thất bại: " + explainPhotoError(e.message), "err");
     } finally {
       button.disabled = false;
       button.textContent = originalLabel;
@@ -2780,7 +2829,9 @@ function openSettingsModal() {
   showSettingsResult("", "");
   elements.settingsModal.classList.add("active");
   refreshBackendStatus();
-  refreshSheetStatus();
+  refreshSheetStatus().then(status => {
+    if (status.configured) checkSheetCapabilities();
+  });
 }
 
 /** Dòng trạng thái Google Sheet trong modal cài đặt */
@@ -2800,11 +2851,22 @@ function renderSheetSettingsBox() {
     box.textContent = "⚪ Máy chủ chạy nhưng chưa nối Sheet. " +
       (state.sheetStatus.reason || "Thiếu biến môi trường.") +
       " Làm theo 7 bước bên dưới là xong." + pendingNote;
+  } else if (state.sheetStatus.scriptError) {
+    box.className = "backend-status err";
+    box.textContent = "🔴 Máy chủ có đủ cấu hình nhưng gọi Apps Script không được: " +
+      state.sheetStatus.scriptError + pendingNote;
+  } else if (state.sheetStatus.photos === false) {
+    // Đi được tới Apps Script nhưng nó trả lời như bản cũ — thiếu đúng phần ảnh
+    box.className = "backend-status warn";
+    box.textContent = "🟡 Đã nối Sheet, nhưng Apps Script đang chạy BẢN CŨ chưa có phần ảnh. " +
+      "Dán lại tools/sheet-appscript.gs rồi Triển khai → Quản lý triển khai → bút chì → " +
+      "Phiên bản: Mới. Chỉ bấm Lưu là chưa đủ." + pendingNote;
   } else {
+    const rowNote = typeof state.sheetStatus.rows === "number" ? ` (${state.sheetStatus.rows} dòng)` : "";
     box.className = "backend-status ok";
     box.textContent = pending > 0
-      ? `🟡 Đã nối Google Sheet${pendingNote} Bấm ☁️ trên đầu trang để đẩy nốt.`
-      : "🟢 Đã nối Google Sheet — mỗi lần thêm, sửa, xoá quán đều tự ghi lên.";
+      ? `🟡 Đã nối Google Sheet${rowNote}${pendingNote} Bấm ☁️ trên đầu trang để đẩy nốt.`
+      : `🟢 Đã nối Google Sheet${rowNote} — thêm, sửa, xoá quán và tải ảnh đều tự ghi lên.`;
   }
 
   if (elements.btnSheetPush) elements.btnSheetPush.disabled = !state.sheetStatus.configured;

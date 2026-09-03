@@ -1,0 +1,244 @@
+/**
+ * /api/sheet — cầu nối giữa trang web và Google Sheet cá nhân.
+ *
+ *   GET  /api/sheet?health=1        → máy chủ sống chưa, đã cấu hình Sheet chưa
+ *   POST /api/sheet  { action: … }  → chuyển tiếp thao tác xuống Google Sheet
+ *
+ *        action = "pull"    đọc toàn bộ quán trong Sheet
+ *        action = "push"    { places: [...] }  thêm mới hoặc cập nhật theo ID
+ *        action = "delete"  { ids: [...] }     xoá dòng theo ID
+ *
+ * VÌ SAO ĐI VÒNG QUA ĐÂY THAY VÌ GỌI THẲNG GOOGLE:
+ *   Trang web nói chuyện với Sheet qua một Apps Script Web App do chính chủ
+ *   Sheet deploy. Địa chỉ /exec của Web App đó chính là thứ mở được Sheet —
+ *   ai có nó cũng ghi được. Nếu để trong js/app.js thì bất kỳ ai xem mã nguồn
+ *   trang cũng đọc được. Đặt ở đây thì nó nằm trong biến môi trường trên
+ *   Vercel, trình duyệt chỉ thấy đường dẫn "/api/sheet" của chính domain mình.
+ *
+ *   Không dùng Google Sheets API vì hướng đó cần khoá OAuth hoặc file khoá
+ *   service account — nhiều thứ bí mật hơn để giữ, mà kết quả không hơn.
+ *   Sheets API cũng KHÔNG thuộc Maps Core Services nên không vướng ràng buộc
+ *   lãnh thổ như Places API (xem ghi chú đầu api/place.js) — vấn đề duy nhất
+ *   chỉ là công sức cấu hình.
+ *
+ * Biến môi trường (đặt trong Vercel → Settings → Environment Variables):
+ *   SHEETS_WEBHOOK_URL  bắt buộc — địa chỉ /exec của Apps Script Web App
+ *   SHEETS_TOKEN        bắt buộc — chuỗi bí mật, phải trùng SHEET_TOKEN
+ *                       trong file tools/sheet-appscript.gs
+ *   ALLOWED_ORIGINS     tuỳ chọn — như /api/place
+ */
+
+"use strict";
+
+const MAX_BODY_BYTES = 1024 * 1024;  // 1 MB, thừa sức cho vài nghìn quán
+const MAX_ITEMS = 1000;              // chặn một lần đẩy quá lớn làm Apps Script hết giờ
+const ALLOWED_ACTIONS = new Set(["pull", "push", "delete", "health"]);
+
+// Apps Script Web App chỉ sống ở hai domain này. Kiểm tra để một biến môi
+// trường bị đặt sai (hoặc bị sửa) không biến endpoint thành proxy tuỳ ý.
+const ALLOWED_WEBHOOK_HOSTS = new Set(["script.google.com", "script.googleusercontent.com"]);
+
+// ─── Giới hạn tần suất (best-effort, xem ghi chú trong api/place.js) ─────────
+const RATE_LIMIT_MAX = 60;
+const RATE_LIMIT_WINDOW_MS = 60000;
+const rateBuckets = new Map();
+
+function isRateLimited(clientIp) {
+  const now = Date.now();
+  const bucket = rateBuckets.get(clientIp);
+
+  if (!bucket || now - bucket.startedAt > RATE_LIMIT_WINDOW_MS) {
+    rateBuckets.set(clientIp, { startedAt: now, count: 1 });
+    return false;
+  }
+
+  bucket.count++;
+  if (rateBuckets.size > 5000) rateBuckets.clear();
+  return bucket.count > RATE_LIMIT_MAX;
+}
+
+// ─── Đọc body ────────────────────────────────────────────────────────────────
+// Vercel tự parse JSON cho req.body, nhưng khi chạy dưới một server Node thuần
+// (bộ test cục bộ) thì không, nên phải tự đọc stream.
+async function readJsonBody(req) {
+  if (req.body && typeof req.body === "object") return req.body;
+  if (typeof req.body === "string") return JSON.parse(req.body);
+
+  const chunks = [];
+  let size = 0;
+
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > MAX_BODY_BYTES) throw new Error("Dữ liệu gửi lên quá lớn.");
+    chunks.push(chunk);
+  }
+
+  const raw = Buffer.concat(chunks).toString("utf8");
+  if (!raw) return {};
+  return JSON.parse(raw);
+}
+
+function resolveCorsOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return null;
+
+  const allowList = (process.env.ALLOWED_ORIGINS || "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  if (allowList.length === 0) return null;
+  if (allowList.includes("*")) return "*";
+  return allowList.includes(origin) ? origin : false;
+}
+
+/** Địa chỉ Web App đã cấu hình, hoặc null nếu chưa/sai */
+function getWebhookUrl() {
+  const raw = (process.env.SHEETS_WEBHOOK_URL || "").trim();
+  if (!raw) return null;
+
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:") return null;
+    if (!ALLOWED_WEBHOOK_HOSTS.has(url.hostname)) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+/** Gửi một thao tác xuống Apps Script và trả lại nguyên văn kết quả */
+async function callAppsScript(webhookUrl, payload) {
+  const res = await fetch(webhookUrl, {
+    method: "POST",
+    // Apps Script trả 302 sang script.googleusercontent.com rồi mới có body
+    redirect: "follow",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(25000)
+  });
+
+  const text = await res.text();
+
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    // Apps Script trả HTML khi deploy sai quyền hoặc script lỗi cú pháp
+    const needsLogin = /accounts\.google\.com|Sign in|đăng nhập/i.test(text);
+    throw new Error(needsLogin
+      ? 'Web App đang đòi đăng nhập — deploy lại với "Who has access: Anyone".'
+      : "Apps Script trả về nội dung không phải JSON.");
+  }
+
+  return json;
+}
+
+module.exports = async function handler(req, res) {
+  const corsOrigin = resolveCorsOrigin(req);
+
+  if (corsOrigin === false) {
+    return res.status(403).json({ ok: false, error: "Origin không được phép gọi endpoint này." });
+  }
+  if (corsOrigin) {
+    res.setHeader("Access-Control-Allow-Origin", corsOrigin);
+    res.setHeader("Vary", "Origin");
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") return res.status(204).end();
+
+  const webhookUrl = getWebhookUrl();
+  const token = (process.env.SHEETS_TOKEN || "").trim();
+  const configured = Boolean(webhookUrl && token);
+
+  // Kiểm tra sức khoẻ — không đụng tới Sheet, chỉ cho biết đã cấu hình chưa
+  if (req.method === "GET") {
+    if (req.query && req.query.health !== undefined) {
+      return res.status(200).json({
+        ok: true,
+        service: "sheet-sync",
+        configured,
+        reason: configured
+          ? ""
+          : !webhookUrl
+            ? "Chưa đặt SHEETS_WEBHOOK_URL (hoặc địa chỉ không phải Apps Script Web App)."
+            : "Chưa đặt SHEETS_TOKEN."
+      });
+    }
+    return res.status(400).json({ ok: false, error: "Dùng POST để đồng bộ, hoặc GET ?health=1." });
+  }
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ ok: false, error: "Chỉ hỗ trợ GET và POST." });
+  }
+
+  const clientIp =
+    (req.headers["x-forwarded-for"] || "").split(",")[0].trim() ||
+    req.socket?.remoteAddress ||
+    "unknown";
+
+  if (isRateLimited(clientIp)) {
+    return res.status(429).json({ ok: false, error: "Bạn đồng bộ quá nhanh, thử lại sau một phút." });
+  }
+
+  if (!configured) {
+    return res.status(503).json({
+      ok: false,
+      error: "Máy chủ chưa được nối với Google Sheet. Xem hướng dẫn trong mục Nguồn dữ liệu.",
+      configured: false
+    });
+  }
+
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch (e) {
+    return res.status(400).json({ ok: false, error: "Body không hợp lệ: " + e.message });
+  }
+
+  const action = String(body.action || "").trim();
+  if (!ALLOWED_ACTIONS.has(action)) {
+    return res.status(400).json({ ok: false, error: 'action không hợp lệ: "' + action + '".' });
+  }
+
+  const places = Array.isArray(body.places) ? body.places : [];
+  const ids = Array.isArray(body.ids) ? body.ids : [];
+
+  if (places.length > MAX_ITEMS || ids.length > MAX_ITEMS) {
+    return res.status(413).json({
+      ok: false,
+      error: "Mỗi lần chỉ đồng bộ tối đa " + MAX_ITEMS + " quán."
+    });
+  }
+  if (action === "push" && places.length === 0) {
+    return res.status(400).json({ ok: false, error: "push nhưng không có quán nào." });
+  }
+  if (action === "delete" && ids.length === 0) {
+    return res.status(400).json({ ok: false, error: "delete nhưng không có id nào." });
+  }
+
+  try {
+    // token được ghép ở đây — client không bao giờ nhìn thấy nó
+    const result = await callAppsScript(webhookUrl, { token, action, places, ids });
+
+    if (!result || result.ok !== true) {
+      return res.status(502).json({
+        ok: false,
+        error: (result && result.error) || "Google Sheet từ chối thao tác."
+      });
+    }
+
+    return res.status(200).json(result);
+  } catch (e) {
+    console.error("[/api/sheet]", e);
+    const timedOut = e.name === "TimeoutError" || /timeout/i.test(e.message || "");
+    return res.status(timedOut ? 504 : 502).json({
+      ok: false,
+      error: timedOut
+        ? "Google Sheet phản hồi quá chậm, thử lại sau."
+        : "Lỗi khi gọi Google Sheet: " + e.message
+    });
+  }
+};

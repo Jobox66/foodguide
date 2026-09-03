@@ -36,12 +36,10 @@
           <button id="btnExportSheets" class="btn-export-csv" title="Xuất dữ liệu ra Google Sheets / Excel (.csv)" aria-label="Xuất Google Sheets">
             📊 Google Sheets
           </button>
+          <button id="btnSyncSheet" class="icon-btn sheet-sync-btn sheet-off" title="Đồng bộ với Google Sheet" aria-label="Đồng bộ Google Sheet">☁️</button>
           <button id="btnOpenSettings" class="icon-btn" title="Nguồn dữ liệu tự động" aria-label="Nguồn dữ liệu">🔌</button>
           <button id="themeToggleBtn" class="icon-btn" title="Đổi giao diện Tối/Sáng" aria-label="Đổi giao diện">🌙</button>
-          <button id="btnImportData" class="icon-btn" title="Nhập / khôi phục dữ liệu từ file JSON" aria-label="Nhập dữ liệu">📥</button>
-          <button id="btnExportData" class="icon-btn" title="Sao lưu / Xuất dữ liệu JSON" aria-label="Xuất dữ liệu">💾</button>
           <button id="shareGuideBtn" class="icon-btn" title="Chia sẻ trang này" aria-label="Chia sẻ">🔗</button>
-          <input type="file" id="importFileInput" accept="application/json,.json" hidden>
         </div>
       </div>
 
@@ -172,7 +170,7 @@
         <span>•</span>
         <a href="javascript:void(0)" onclick="openAddPlaceModal()" class="footer-link">Đóng góp quán</a>
         <span>•</span>
-        <a href="javascript:void(0)" onclick="exportDataJSON()" class="footer-link">Tải dữ liệu</a>
+        <a href="javascript:void(0)" onclick="exportGoogleSheetsCSV()" class="footer-link">Tải file .csv</a>
       </div>
       <p>© 2026 Hanoi Food & Cafe Guide. Tuyển tập ẩm thực chất lượng cao tại Thủ đô.</p>
     </footer>
@@ -518,9 +516,9 @@
       <div class="sheet-drag-handle"></div>
       <button class="modal-close-btn" title="Đóng">✕</button>
       <div class="modal-body">
-        <h2 class="modal-title" style="margin-bottom: 6px;">⚙️ Nguồn dữ liệu tự động</h2>
+        <h2 class="modal-title" style="margin-bottom: 6px;">⚙️ Nguồn dữ liệu &amp; đồng bộ</h2>
         <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 18px;">
-          Trang lấy thông tin quán từ đâu khi bạn dán link Google Maps.
+          Trang lấy thông tin quán từ đâu, và lưu về đâu.
         </p>
 
         <div id="backendStatusBox" class="backend-status">Đang kiểm tra máy chủ…</div>
@@ -547,6 +545,44 @@
           </div>
 
           <div id="settingsTestResult" class="settings-test-result"></div>
+        </div>
+
+        <div class="settings-source-box settings-sheet">
+          <div class="settings-source-title">☁️ Google Sheet — sổ cái của bạn</div>
+          <p class="settings-source-desc">
+            Mỗi lần bạn <strong>thêm, sửa, xoá</strong> một quán, thay đổi được ghi thẳng lên
+            Google Sheet cá nhân. Xoá cache trình duyệt hay đổi máy vẫn còn dữ liệu — và bạn
+            có thể sửa hàng loạt ngay trong Sheet rồi bấm <em>Lấy từ Sheet về</em>.
+          </p>
+
+          <div id="sheetStatusBox" class="backend-status">Đang kiểm tra kết nối Sheet…</div>
+
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
+            <button type="button" id="btnSheetPush" class="btn-open-maps" style="padding: 9px 14px;">⬆️ Đẩy toàn bộ lên Sheet</button>
+            <button type="button" id="btnSheetPull" class="btn-open-maps" style="padding: 9px 14px;">📥 Lấy từ Sheet về</button>
+          </div>
+
+          <details class="settings-help" style="margin-top: 14px;">
+            <summary>Cách nối Sheet của bạn — 7 bước, làm một lần</summary>
+            <ol class="settings-steps">
+              <li>Tạo một Google Sheet trống tại <code>sheets.new</code>. Không cần tạo cột.</li>
+              <li>Trong Sheet: <strong>Tiện ích mở rộng → Apps Script</strong>.</li>
+              <li>Xoá hết nội dung <code>Code.gs</code>, dán toàn bộ file <code>tools/sheet-appscript.gs</code> trong mã nguồn trang này vào.</li>
+              <li>Sửa dòng <code>SHEET_TOKEN</code> thành một chuỗi bí mật tự nghĩ. Nhớ chuỗi đó.</li>
+              <li><strong>Triển khai → Tuỳ chọn triển khai mới → Ứng dụng web</strong>, đặt
+                <em>Thực thi với tư cách: Tôi</em> và <em>Ai có quyền truy cập: Bất kỳ ai</em>.
+                Copy đường dẫn <code>.../exec</code> hiện ra.</li>
+              <li>Vercel → dự án → <strong>Settings → Environment Variables</strong>, thêm
+                <code>SHEETS_WEBHOOK_URL</code> (đường dẫn <code>/exec</code>) và
+                <code>SHEETS_TOKEN</code> (chuỗi ở bước 4).</li>
+              <li><strong>Redeploy</strong> dự án, quay lại đây bấm <em>Đẩy toàn bộ lên Sheet</em>.</li>
+            </ol>
+            <p class="settings-warning">
+              Hai giá trị đó nằm trong biến môi trường trên Vercel, không nằm trong mã nguồn trang.
+              Người vào xem cẩm nang chỉ thấy đường dẫn <code>/api/sheet</code> của chính domain bạn —
+              không đọc được Sheet, không ghi được vào Sheet.
+            </p>
+          </details>
         </div>
 
         <div class="settings-source-box">

@@ -17,6 +17,10 @@ const state = {
   viewMode: "explorer", // 'explorer' (thẻ chi tiết) hoặc 'portal' (danh mục bio)
   deletedIds: new Set(),
   backendStatus: { online: false },
+  sheetStatus: { online: false, configured: false, reason: "", syncing: false },
+  // Thao tác chưa đẩy được lên Sheet (mất mạng, máy chủ lỗi). Nằm trong
+  // LocalStorage nên đóng tab rồi mở lại vẫn còn để thử tiếp.
+  sheetQueue: { upserts: {}, deletes: [] },
   theme: "light"
 };
 
@@ -27,6 +31,7 @@ const STORAGE_KEY_PROFILE = "foodguide_hanoi_profile_v1";
 const STORAGE_KEY_SETTINGS = "foodguide_hanoi_settings_v1";
 const STORAGE_KEY_VIEW = "foodguide_view_mode_v1";
 const STORAGE_KEY_THEME = "foodguide_theme_v1";
+const STORAGE_KEY_SHEET_QUEUE = "foodguide_hanoi_sheet_queue_v1";
 
 // DOM Elements Cache
 const elements = {};
@@ -112,7 +117,8 @@ const DATA_SOURCE_LABELS = {
   known: "Danh sách đối chiếu",
   link: "Link Google Maps",
   manual: "Tự nhập",
-  import: "Nhập từ file"
+  sheet: "Google Sheet",
+  import: "Nhập từ file" // dữ liệu cũ, từ thời còn nút nhập JSON
 };
 
 /**
@@ -126,6 +132,7 @@ document.addEventListener("DOMContentLoaded", () => {
   updateCategoryCounts();
   renderAll();
   refreshBackendStatus(); // chạy nền, không chặn lần render đầu
+  refreshSheetStatus().then(() => flushSheetQueue({ silent: true }));
 });
 
 /**
@@ -161,6 +168,12 @@ function initData() {
   state.settings = { apiBaseUrl: "", ...safeParse(localStorage.getItem(STORAGE_KEY_SETTINGS), {}) };
   delete state.settings.googleApiKey; // khoá không còn được lưu phía trình duyệt
   state.viewMode = localStorage.getItem(STORAGE_KEY_VIEW) || "explorer";
+
+  const queue = safeParse(localStorage.getItem(STORAGE_KEY_SHEET_QUEUE), null);
+  state.sheetQueue = {
+    upserts: queue && queue.upserts && typeof queue.upserts === "object" ? queue.upserts : {},
+    deletes: queue && Array.isArray(queue.deletes) ? queue.deletes : []
+  };
 }
 
 /** Ghi danh sách quán (kèm danh sách đã xoá) xuống LocalStorage */
@@ -210,11 +223,14 @@ function cacheDOMElements() {
   elements.themeToggleBtn = document.getElementById("themeToggleBtn");
   elements.shareGuideBtn = document.getElementById("shareGuideBtn");
   elements.btnAddPlace = document.getElementById("btnAddPlace");
-  elements.btnExportData = document.getElementById("btnExportData");
   elements.btnOpenManager = document.getElementById("btnOpenManager");
   elements.btnExportSheets = document.getElementById("btnExportSheets");
-  elements.btnImportData = document.getElementById("btnImportData");
-  elements.importFileInput = document.getElementById("importFileInput");
+
+  // Đồng bộ Google Sheet
+  elements.btnSyncSheet = document.getElementById("btnSyncSheet");
+  elements.sheetStatusBox = document.getElementById("sheetStatusBox");
+  elements.btnSheetPush = document.getElementById("btnSheetPush");
+  elements.btnSheetPull = document.getElementById("btnSheetPull");
 
   // Cài đặt nguồn dữ liệu
   elements.btnOpenSettings = document.getElementById("btnOpenSettings");
@@ -464,17 +480,15 @@ function setupEventListeners() {
     elements.addPlaceForm.addEventListener("submit", handleAddPlaceSubmit);
   }
 
-  // Export JSON
-  if (elements.btnExportData) {
-    elements.btnExportData.addEventListener("click", exportDataJSON);
+  // Đồng bộ Google Sheet
+  if (elements.btnSyncSheet) {
+    elements.btnSyncSheet.addEventListener("click", syncWithSheet);
   }
-
-  // Import JSON (khôi phục từ file sao lưu)
-  if (elements.btnImportData) {
-    elements.btnImportData.addEventListener("click", () => elements.importFileInput.click());
+  if (elements.btnSheetPush) {
+    elements.btnSheetPush.addEventListener("click", pushAllToSheet);
   }
-  if (elements.importFileInput) {
-    elements.importFileInput.addEventListener("change", handleImportFile);
+  if (elements.btnSheetPull) {
+    elements.btnSheetPull.addEventListener("click", () => pullFromSheet({ silent: false }));
   }
 
   // Cài đặt nguồn dữ liệu
@@ -1445,6 +1459,346 @@ async function fetchPlaceFromBackend(mapsUrl, hint) {
 }
 
 /* ===================================================================
+   ĐỒNG BỘ GOOGLE SHEET
+
+   LocalStorage vẫn là nguồn chuẩn khi đang dùng: mọi thao tác ghi xuống
+   máy trước, rồi mới đẩy lên Sheet. Sheet đóng vai trò sổ cái — nơi dữ
+   liệu sống sót khi xoá cache trình duyệt, đổi máy, hoặc muốn sửa hàng
+   loạt bằng tay.
+
+   Thao tác đẩy lên thất bại (mất mạng, máy chủ lỗi) không bị mất: nó nằm
+   trong hàng đợi ở LocalStorage và được thử lại ở lần đồng bộ sau.
+
+   Trình duyệt không giữ địa chỉ Web App lẫn token — hai thứ đó nằm trong
+   biến môi trường trên Vercel, xem ghi chú đầu file api/sheet.js.
+   =================================================================== */
+
+const DEFAULT_SHEET_ENDPOINT = "/api/sheet";
+
+/** Các trường được đồng bộ. Thứ tự cột do Apps Script quyết định, không phải ở đây. */
+const SHEET_FIELDS = [
+  "id", "name", "category", "district", "address",
+  "rating", "reviewCount", "priceRange", "priceLevel", "time",
+  "mustTry", "review", "mapsUrl", "tags", "image",
+  "lat", "lng", "verified", "featured", "dataSource"
+];
+
+/** Mỗi lô gửi tối đa ngần này quán, để Apps Script không chạy quá lâu rồi bị cắt */
+const SHEET_BATCH_SIZE = 100;
+
+function getSheetEndpoint() {
+  const custom = (state.settings.apiBaseUrl || "").trim();
+  if (!custom) return DEFAULT_SHEET_ENDPOINT;
+
+  // Người dùng chỉ khai báo endpoint của /api/place; /api/sheet nằm cạnh nó
+  const swapped = custom.replace(/\/place(?=$|[?#])/, "/sheet");
+  return swapped !== custom ? swapped : custom.replace(/\/[^/?#]*(?=$|[?#])/, "/sheet");
+}
+
+/** Chỉ giữ các trường Sheet hiểu — bớt dữ liệu thừa gửi qua mạng */
+function toSheetPlace(place) {
+  const trimmed = {};
+  SHEET_FIELDS.forEach(key => { trimmed[key] = place[key]; });
+  return trimmed;
+}
+
+/** Chuỗi đại diện để so hai bản ghi xem có khác nhau thật không */
+function placeSignature(place) {
+  return JSON.stringify(SHEET_FIELDS.map(key => {
+    const value = place[key];
+    if (Array.isArray(value)) return value.join(",");
+    if (value === null || value === undefined) return "";
+    return String(value);
+  }));
+}
+
+function pendingSheetCount() {
+  return Object.keys(state.sheetQueue.upserts).length + state.sheetQueue.deletes.length;
+}
+
+function saveSheetQueue() {
+  try {
+    localStorage.setItem(STORAGE_KEY_SHEET_QUEUE, JSON.stringify(state.sheetQueue));
+  } catch (e) {
+    console.warn("Không lưu được hàng đợi đồng bộ:", e.message);
+  }
+  updateSheetButton();
+  renderSheetSettingsBox();
+}
+
+/** Ghi nhận một quán cần đẩy lên Sheet, rồi thử đẩy ngay trong nền */
+function queueSheetUpsert(place) {
+  if (!place || !place.id) return;
+
+  state.sheetQueue.upserts[place.id] = toSheetPlace(place);
+  state.sheetQueue.deletes = state.sheetQueue.deletes.filter(id => id !== place.id);
+  saveSheetQueue();
+
+  flushSheetQueue({ silent: true });
+}
+
+function queueSheetDelete(placeId) {
+  if (!placeId) return;
+
+  delete state.sheetQueue.upserts[placeId];
+  if (!state.sheetQueue.deletes.includes(placeId)) {
+    state.sheetQueue.deletes.push(placeId);
+  }
+  saveSheetQueue();
+
+  flushSheetQueue({ silent: true });
+}
+
+async function callSheetApi(payload, timeoutMs = 30000) {
+  const res = await fetch(getSheetEndpoint(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(timeoutMs)
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json.ok !== true) {
+    throw new Error(json.error || `máy chủ trả về ${res.status}`);
+  }
+  return json;
+}
+
+/** Hỏi máy chủ: có nối được Sheet không, và đã cấu hình đủ biến môi trường chưa */
+async function refreshSheetStatus() {
+  const endpoint = getSheetEndpoint();
+  const separator = endpoint.includes("?") ? "&" : "?";
+
+  try {
+    const res = await fetch(`${endpoint}${separator}health=1`, { signal: AbortSignal.timeout(8000) });
+    const json = await res.json();
+
+    state.sheetStatus.online = true;
+    state.sheetStatus.configured = json.configured === true;
+    state.sheetStatus.reason = json.reason || "";
+  } catch (e) {
+    state.sheetStatus.online = false;
+    state.sheetStatus.configured = false;
+    state.sheetStatus.reason = e.message;
+  }
+
+  updateSheetButton();
+  renderSheetSettingsBox();
+  return state.sheetStatus;
+}
+
+function chunk(list, size) {
+  const out = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
+
+/**
+ * Đẩy hàng đợi lên Sheet.
+ * Chỉ xoá khỏi hàng đợi đúng những mục đã gửi thành công — thao tác phát sinh
+ * trong lúc đang gửi vẫn được giữ lại cho lượt sau.
+ */
+async function flushSheetQueue(options) {
+  const silent = Boolean(options && options.silent);
+  const upserts = Object.values(state.sheetQueue.upserts);
+  const deletes = [...state.sheetQueue.deletes];
+
+  if (upserts.length === 0 && deletes.length === 0) {
+    return { pushed: 0, deleted: 0 };
+  }
+  if (!state.sheetStatus.configured) {
+    if (!silent) showToast("☁️ Chưa nối Google Sheet — mở ⚙️ Nguồn dữ liệu để xem cách cài.");
+    return null;
+  }
+
+  try {
+    for (const batch of chunk(upserts, SHEET_BATCH_SIZE)) {
+      await callSheetApi({ action: "push", places: batch });
+      batch.forEach(p => { delete state.sheetQueue.upserts[p.id]; });
+      saveSheetQueue();
+    }
+
+    for (const batch of chunk(deletes, SHEET_BATCH_SIZE)) {
+      await callSheetApi({ action: "delete", ids: batch });
+      state.sheetQueue.deletes = state.sheetQueue.deletes.filter(id => !batch.includes(id));
+      saveSheetQueue();
+    }
+
+    return { pushed: upserts.length, deleted: deletes.length };
+  } catch (e) {
+    // Hàng đợi giữ nguyên phần chưa gửi được, lần sau thử lại
+    saveSheetQueue();
+    if (!silent) showToast("⚠️ Chưa đẩy lên Sheet được: " + e.message);
+    else console.warn("Đồng bộ nền thất bại:", e.message);
+    return null;
+  }
+}
+
+/** Đẩy toàn bộ danh sách hiện tại lên Sheet, không chỉ phần đang chờ */
+async function pushAllToSheet() {
+  state.places.forEach(p => { state.sheetQueue.upserts[p.id] = toSheetPlace(p); });
+  saveSheetQueue();
+
+  const result = await flushSheetQueue({ silent: false });
+  if (result) showToast(`⬆️ Đã đẩy ${result.pushed} quán lên Google Sheet.`);
+  return result;
+}
+
+/**
+ * Kéo dữ liệu từ Sheet về máy.
+ *
+ * Nguyên tắc an toàn: kéo về KHÔNG BAO GIỜ xoá quán ở máy. Quán chỉ có ở máy
+ * mà chưa có trên Sheet được coi là chưa đẩy lên, nên đưa vào hàng đợi thay vì
+ * bị coi là đã xoá. Chiều xoá chỉ đi từ nút 🗑️ trong trang.
+ */
+async function pullFromSheet(options) {
+  const silent = Boolean(options && options.silent);
+
+  if (!state.sheetStatus.configured) {
+    if (!silent) showToast("☁️ Chưa nối Google Sheet — mở ⚙️ Nguồn dữ liệu để xem cách cài.");
+    return null;
+  }
+
+  let rows;
+  try {
+    const json = await callSheetApi({ action: "pull" });
+    rows = (Array.isArray(json.places) ? json.places : [])
+      .filter(r => r && r.id && r.name)
+      .map(r => { delete r.updatedAt; return r; }); // cột giờ ghi, trang không dùng
+  } catch (e) {
+    if (!silent) showToast("⚠️ Không đọc được Google Sheet: " + e.message);
+    return null;
+  }
+
+  const localById = new Map(state.places.map(p => [p.id, p]));
+  const pendingDeletes = new Set(state.sheetQueue.deletes);
+
+  const incomingNew = [];
+  const incomingChanged = [];
+
+  rows.forEach(row => {
+    if (pendingDeletes.has(row.id)) return; // đang chờ xoá khỏi Sheet, đừng kéo về
+
+    const local = localById.get(row.id);
+    if (!local) {
+      incomingNew.push(normalizePlace({ ...row, dataSource: row.dataSource || "sheet" }));
+      return;
+    }
+
+    // So trên bản ĐÃ chuẩn hoá — đúng bằng thứ sẽ được lưu xuống. So với dòng
+    // thô thì một ô trống trên Sheet lại khác giá trị mặc định mà normalizePlace
+    // điền vào, và lần kéo về nào cũng báo "có thay đổi" dù chẳng có gì đổi.
+    const merged = normalizePlace({ ...local, ...row });
+    if (placeSignature(merged) !== placeSignature(local)) incomingChanged.push(merged);
+  });
+
+  if (incomingNew.length === 0 && incomingChanged.length === 0) {
+    if (!silent) showToast("✅ Máy và Google Sheet đã khớp nhau.");
+    return { added: 0, updated: 0 };
+  }
+
+  // Ghi đè bản ở máy là thao tác mất dữ liệu — hỏi trước
+  if (!silent && incomingChanged.length > 0) {
+    const proceed = confirm(
+      `Google Sheet có thay đổi so với bản trên máy:\n\n` +
+      `• ${incomingChanged.length} quán sẽ được cập nhật theo Sheet\n` +
+      `• ${incomingNew.length} quán mới sẽ được thêm vào\n\n` +
+      `Bấm OK để lấy bản trên Sheet làm chuẩn.`
+    );
+    if (!proceed) return null;
+  }
+
+  incomingChanged.forEach(place => {
+    const index = state.places.findIndex(p => p.id === place.id);
+    if (index !== -1) state.places[index] = place;
+  });
+
+  incomingNew.forEach(place => {
+    // Có mặt trên Sheet nghĩa là quán còn tồn tại, kể cả khi từng bị xoá ở máy
+    state.deletedIds.delete(place.id);
+    state.places.push(place);
+    // Bản đã chuẩn hoá có thể khác dòng trên Sheet (ô trống được điền mặc định),
+    // đẩy ngược lên để hai bên khớp nhau ngay từ lần kéo sau
+    state.sheetQueue.upserts[place.id] = toSheetPlace(place);
+  });
+
+  savePlaces();
+  refreshAfterDataChange();
+  if (elements.placeManagerModal && elements.placeManagerModal.classList.contains("active")) {
+    renderManagerTable();
+  }
+  if (incomingNew.length > 0) {
+    saveSheetQueue();
+    await flushSheetQueue({ silent: true });
+  }
+
+  if (!silent) {
+    showToast(`📥 Đã lấy về ${incomingNew.length} quán mới, cập nhật ${incomingChanged.length} quán.`);
+  }
+  return { added: incomingNew.length, updated: incomingChanged.length };
+}
+
+/**
+ * Nút ☁️ trên đầu trang: đẩy phần đang chờ lên trước, rồi lấy thay đổi từ
+ * Sheet về. Đẩy trước để thay đổi vừa làm ở máy không bị bản cũ trên Sheet đè.
+ */
+async function syncWithSheet() {
+  if (state.sheetStatus.syncing) return;
+
+  state.sheetStatus.syncing = true;
+  updateSheetButton();
+
+  try {
+    await refreshSheetStatus();
+
+    if (!state.sheetStatus.online) {
+      showToast("🔴 Không gọi được máy chủ — trang đang chạy ngoài Vercel?");
+      return;
+    }
+    if (!state.sheetStatus.configured) {
+      showToast("☁️ Chưa nối Google Sheet. Mở ⚙️ Nguồn dữ liệu để xem 7 bước cài.");
+      openSettingsModal();
+      return;
+    }
+
+    const pushed = await flushSheetQueue({ silent: false });
+    if (pushed === null) return; // đẩy lỗi thì đừng kéo về, tránh mất thay đổi ở máy
+
+    await pullFromSheet({ silent: false });
+  } finally {
+    state.sheetStatus.syncing = false;
+    updateSheetButton();
+  }
+}
+
+/** Cập nhật hình thức nút ☁️ theo trạng thái kết nối và số việc đang chờ */
+function updateSheetButton() {
+  const btn = elements.btnSyncSheet;
+  if (!btn) return;
+
+  const pending = pendingSheetCount();
+
+  if (state.sheetStatus.syncing) {
+    btn.textContent = "⏳";
+    btn.classList.add("is-syncing");
+    btn.title = "Đang đồng bộ với Google Sheet…";
+    return;
+  }
+
+  btn.classList.remove("is-syncing");
+  btn.textContent = "☁️";
+  btn.classList.toggle("sheet-off", !state.sheetStatus.configured);
+  btn.classList.toggle("sheet-pending", pending > 0);
+  btn.dataset.pending = pending > 0 ? String(pending) : "";
+
+  btn.title = !state.sheetStatus.configured
+    ? "Chưa nối Google Sheet — bấm để xem hướng dẫn cài"
+    : pending > 0
+      ? `Đồng bộ Google Sheet — ${pending} thay đổi đang chờ đẩy lên`
+      : "Đồng bộ với Google Sheet";
+}
+
+/* ===================================================================
    Ô NHẬP ĐIỂM GOOGLE MAPS
 
    Số sao và lượt đánh giá là hai trường duy nhất phải nhập tay, nên đây
@@ -1846,9 +2200,11 @@ function handleAddPlaceSubmit(e) {
     featured: false
   };
 
-  state.places.unshift(normalizePlace(newPlace));
+  const stored = normalizePlace(newPlace);
+  state.places.unshift(stored);
   savePlaces();
   refreshAfterDataChange();
+  queueSheetUpsert(stored); // ghi tiếp lên Google Sheet trong nền
 
   closeAllModals();
   elements.addPlaceForm.reset();
@@ -1863,28 +2219,6 @@ function findDuplicatePlace(name, mapsUrl, excludeId) {
     if (mapsUrl && p.mapsUrl && p.mapsUrl === mapsUrl) return true;
     return normalizeVi(p.name) === targetName;
   }) || null;
-}
-
-/**
- * Xuất dữ liệu ra file JSON để backup hoặc chia sẻ
- */
-function exportDataJSON() {
-  const exportData = {
-    profile: state.profile,
-    categories: state.categories,
-    places: state.places,
-    exportedAt: new Date().toISOString()
-  };
-
-  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
-  const downloadAnchor = document.createElement("a");
-  downloadAnchor.setAttribute("href", dataStr);
-  downloadAnchor.setAttribute("download", `hanoi_foodguide_data_${Date.now()}.json`);
-  document.body.appendChild(downloadAnchor);
-  downloadAnchor.click();
-  downloadAnchor.remove();
-
-  showToast("💾 Đã tải về file dữ liệu JSON thành công!");
 }
 
 /**
@@ -2153,6 +2487,7 @@ function handleEditPlaceSubmit(e) {
   savePlaces();
   refreshAfterDataChange();
   renderManagerTable();
+  queueSheetUpsert(state.places[index]);
 
   elements.editPlaceModal.classList.remove("active");
   showToast(`✏️ Đã cập nhật thông tin "${name}" thành công!`);
@@ -2172,6 +2507,7 @@ function deletePlace(placeId) {
     savePlaces();
     refreshAfterDataChange();
     renderManagerTable();
+    queueSheetDelete(placeId);
     showToast(`🗑️ Đã xóa "${place.name}" khỏi danh sách!`);
   }
 }
@@ -2185,6 +2521,7 @@ function toggleVerified(placeId) {
   savePlaces();
   renderPlaces();
   renderManagerTable();
+  queueSheetUpsert(place);
   showToast(place.verified
     ? `✅ Đã đánh dấu "${place.name}" là đã đối chiếu`
     : `↩️ Đã bỏ dấu xác minh của "${place.name}"`);
@@ -2215,90 +2552,6 @@ function copyShareUrl() {
 }
 
 /* ===================================================================
-   NHẬP DỮ LIỆU TỪ FILE SAO LƯU
-   =================================================================== */
-
-/**
- * Khôi phục cẩm nang từ file .json đã xuất trước đó.
- * Trước đây chỉ có nút Xuất mà không có đường nhập lại, nên mất
- * LocalStorage là mất sạch dù đã tải file backup về máy.
- */
-async function handleImportFile(event) {
-  const file = event.target.files && event.target.files[0];
-  if (!file) return;
-
-  try {
-    const text = await file.text();
-    const data = safeParse(text, null);
-
-    // Chấp nhận cả file xuất đầy đủ lẫn mảng quán thuần
-    const incoming = Array.isArray(data) ? data : (data && Array.isArray(data.places) ? data.places : null);
-    if (!incoming) {
-      showToast("⚠️ File không đúng định dạng — cần file .json xuất từ chính trang này.");
-      return;
-    }
-
-    const valid = incoming.filter(p => p && typeof p.name === "string" && p.name.trim());
-    if (valid.length === 0) {
-      showToast("⚠️ File không chứa quán nào hợp lệ.");
-      return;
-    }
-
-    const replace = confirm(
-      `File chứa ${valid.length} quán.\n\n` +
-      `OK = Thay thế toàn bộ danh sách hiện tại (${state.places.length} quán)\n` +
-      `Cancel = Gộp thêm vào danh sách, bỏ qua quán đã có`
-    );
-
-    if (replace) {
-      state.deletedIds = new Set();
-      state.places = valid.map(p => normalizePlace({
-        ...p,
-        id: p.id || "place-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
-        dataSource: p.dataSource || "import"
-      }));
-      showToast(`📥 Đã khôi phục ${state.places.length} quán từ file sao lưu.`);
-    } else {
-      const existingIds = new Set(state.places.map(p => p.id));
-      let added = 0;
-      let skipped = 0;
-
-      valid.forEach(p => {
-        const id = p.id || "place-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
-        if (existingIds.has(id) || findDuplicatePlace(p.name, p.mapsUrl)) {
-          skipped++;
-          return;
-        }
-        state.places.push(normalizePlace({ ...p, id, dataSource: p.dataSource || "import" }));
-        existingIds.add(id);
-        state.deletedIds.delete(id);
-        added++;
-      });
-
-      showToast(`📥 Đã thêm ${added} quán mới${skipped > 0 ? `, bỏ qua ${skipped} quán đã có` : ""}.`);
-    }
-
-    // Khôi phục cả hồ sơ tác giả nếu file có
-    if (data && data.profile && typeof data.profile === "object") {
-      state.profile = { ...DEFAULT_PROFILE, ...data.profile };
-      localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(state.profile));
-    }
-
-    savePlaces();
-    refreshAfterDataChange();
-    if (elements.placeManagerModal && elements.placeManagerModal.classList.contains("active")) {
-      renderManagerTable();
-    }
-  } catch (e) {
-    console.error("Nhập file thất bại:", e);
-    showToast("⚠️ Không đọc được file: " + e.message);
-  } finally {
-    // Reset để chọn lại đúng file đó vẫn kích hoạt sự kiện change
-    event.target.value = "";
-  }
-}
-
-/* ===================================================================
    CÀI ĐẶT NGUỒN DỮ LIỆU
 
    Chỉ lưu địa chỉ endpoint. Không có khoá API nào ở phía trình duyệt,
@@ -2313,6 +2566,35 @@ function openSettingsModal() {
   showSettingsResult("", "");
   elements.settingsModal.classList.add("active");
   refreshBackendStatus();
+  refreshSheetStatus();
+}
+
+/** Dòng trạng thái Google Sheet trong modal cài đặt */
+function renderSheetSettingsBox() {
+  const box = elements.sheetStatusBox;
+  if (!box) return;
+
+  const pending = pendingSheetCount();
+  const pendingNote = pending > 0 ? ` — ${pending} thay đổi đang chờ đẩy lên.` : "";
+
+  if (!state.sheetStatus.online) {
+    box.className = "backend-status err";
+    box.textContent = "🔴 Không gọi được /api/sheet. Trang đang chạy ngoài Vercel, " +
+      "hoặc chưa deploy bản mới nhất." + pendingNote;
+  } else if (!state.sheetStatus.configured) {
+    box.className = "backend-status";
+    box.textContent = "⚪ Máy chủ chạy nhưng chưa nối Sheet. " +
+      (state.sheetStatus.reason || "Thiếu biến môi trường.") +
+      " Làm theo 7 bước bên dưới là xong." + pendingNote;
+  } else {
+    box.className = "backend-status ok";
+    box.textContent = pending > 0
+      ? `🟡 Đã nối Google Sheet${pendingNote} Bấm ☁️ trên đầu trang để đẩy nốt.`
+      : "🟢 Đã nối Google Sheet — mỗi lần thêm, sửa, xoá quán đều tự ghi lên.";
+  }
+
+  if (elements.btnSheetPush) elements.btnSheetPush.disabled = !state.sheetStatus.configured;
+  if (elements.btnSheetPull) elements.btnSheetPull.disabled = !state.sheetStatus.configured;
 }
 
 function showSettingsResult(message, kind) {
@@ -2429,6 +2711,5 @@ window.openPlaceDetailModal = openPlaceDetailModal;
 window.openEditPlaceModal = openEditPlaceModal;
 window.deletePlace = deletePlace;
 window.toggleVerified = toggleVerified;
-window.exportDataJSON = exportDataJSON;
 window.exportGoogleSheetsCSV = exportGoogleSheetsCSV;
 window.closeAllModals = closeAllModals;

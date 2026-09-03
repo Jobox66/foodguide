@@ -1,0 +1,329 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  FOODGUIDE  ↔  GOOGLE SHEET
+ *  Dán toàn bộ file này vào Apps Script của Sheet bạn muốn dùng làm sổ cái.
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ *  CÁCH CÀI (làm một lần, khoảng 5 phút)
+ *
+ *  1. Tạo một Google Sheet mới (sheets.new). Không cần tạo cột — script tự tạo.
+ *
+ *  2. Trong Sheet: menu  Tiện ích mở rộng → Apps Script.
+ *
+ *  3. Xoá sạch nội dung file Code.gs đang có, dán toàn bộ file này vào.
+ *
+ *  4. Sửa dòng SHEET_TOKEN bên dưới thành một chuỗi bí mật của riêng bạn.
+ *     Ví dụ tự nghĩ: "pho-bat-dan-2026-xin-chao". Nhớ chuỗi này, lát nữa
+ *     phải điền y hệt vào Vercel.
+ *
+ *  5. Bấm  Triển khai (Deploy) → Tuỳ chọn triển khai mới (New deployment)
+ *       • Loại (Select type)     : Ứng dụng web (Web app)
+ *       • Thực thi với tư cách   : Tôi  (Execute as: Me)
+ *       • Ai có quyền truy cập   : Bất kỳ ai  (Who has access: Anyone)
+ *
+ *     ⚠️ Phải chọn đúng "Bất kỳ ai". Chọn "Bất kỳ ai có Tài khoản Google"
+ *        thì máy chủ sẽ bị Google chặn lại ở màn hình đăng nhập.
+ *
+ *     Google sẽ hỏi cấp quyền — bấm qua màn hình cảnh báo bằng
+ *     "Nâng cao (Advanced)" → "Chuyển đến … (unsafe)". Cảnh báo đó xuất hiện
+ *     vì script chưa qua kiểm duyệt của Google, mà script này là của chính bạn.
+ *
+ *  6. Copy đường dẫn Web App hiện ra, dạng:
+ *       https://script.google.com/macros/s/AKfycb.../exec
+ *
+ *  7. Sang Vercel → dự án foodguide → Settings → Environment Variables,
+ *     thêm hai biến rồi Redeploy:
+ *       SHEETS_WEBHOOK_URL = đường dẫn /exec vừa copy
+ *       SHEETS_TOKEN       = đúng chuỗi bí mật ở bước 4
+ *
+ *  Xong. Đường dẫn /exec và token nằm trên máy chủ Vercel, trình duyệt của
+ *  người xem trang không bao giờ nhìn thấy — họ chỉ thấy "/api/sheet".
+ *
+ *  ─────────────────────────────────────────────────────────────────────────
+ *  MỖI KHI SỬA FILE NÀY, phải Deploy → Quản lý triển khai (Manage deployments)
+ *  → biểu tượng bút chì → Phiên bản: Mới (New version) → Triển khai.
+ *  Nếu chỉ Lưu mà không deploy lại thì Web App vẫn chạy mã cũ.
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+
+/** Chuỗi bí mật — ĐỔI THÀNH CỦA BẠN, và điền y hệt vào SHEETS_TOKEN trên Vercel */
+var SHEET_TOKEN = 'doi-chuoi-nay-thanh-cua-ban';
+
+/** Tên tab trong Sheet. Script tự tạo nếu chưa có. */
+var SHEET_NAME = 'FoodGuide';
+
+/**
+ * Thứ tự cột trong Sheet. Đổi label thoải mái (chỉ là chữ ở hàng tiêu đề),
+ * nhưng ĐỪNG đổi key và đừng đảo thứ tự — script đọc/ghi theo vị trí.
+ */
+var COLUMNS = [
+  { key: 'id',          label: 'ID' },
+  { key: 'name',        label: 'Tên quán' },
+  { key: 'category',    label: 'Danh mục' },
+  { key: 'district',    label: 'Quận' },
+  { key: 'address',     label: 'Địa chỉ' },
+  { key: 'rating',      label: 'Số sao' },
+  { key: 'reviewCount', label: 'Lượt đánh giá' },
+  { key: 'priceRange',  label: 'Khoảng giá' },
+  { key: 'priceLevel',  label: 'Mức giá' },
+  { key: 'time',        label: 'Giờ mở cửa' },
+  { key: 'mustTry',     label: 'Món must-try' },
+  { key: 'review',      label: 'Cảm nhận' },
+  { key: 'mapsUrl',     label: 'Link Google Maps' },
+  { key: 'tags',        label: 'Tags' },
+  { key: 'image',       label: 'Ảnh' },
+  { key: 'lat',         label: 'Vĩ độ' },
+  { key: 'lng',         label: 'Kinh độ' },
+  { key: 'verified',    label: 'Đã xác minh' },
+  { key: 'featured',    label: 'Nổi bật' },
+  { key: 'dataSource',  label: 'Nguồn dữ liệu' },
+  { key: 'updatedAt',   label: 'Cập nhật lúc' }
+];
+
+var ID_COLUMN = 1; // cột A
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ĐIỂM VÀO
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function doGet() {
+  // Mở đường dẫn /exec bằng trình duyệt sẽ thấy dòng này — dùng để kiểm tra
+  // deploy đã đúng quyền chưa. Không trả về dữ liệu quán.
+  return jsonOut_({ ok: true, service: 'foodguide-sheet', hint: 'Web App đang chạy. Trang web gọi bằng POST.' });
+}
+
+function doPost(e) {
+  var body;
+  try {
+    body = JSON.parse(e.postData.contents);
+  } catch (err) {
+    return jsonOut_({ ok: false, error: 'Body không phải JSON.' });
+  }
+
+  if (!SHEET_TOKEN || SHEET_TOKEN === 'doi-chuoi-nay-thanh-cua-ban') {
+    return jsonOut_({ ok: false, error: 'Bạn chưa đổi SHEET_TOKEN trong Apps Script.' });
+  }
+  if (body.token !== SHEET_TOKEN) {
+    return jsonOut_({ ok: false, error: 'Sai token — SHEETS_TOKEN trên Vercel chưa trùng SHEET_TOKEN trong Apps Script.' });
+  }
+
+  // Khoá để hai lần đồng bộ chồng nhau không ghi đè lên nhau
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(20000);
+  } catch (err) {
+    return jsonOut_({ ok: false, error: 'Sheet đang bận, thử lại sau vài giây.' });
+  }
+
+  try {
+    switch (body.action) {
+      case 'health': return jsonOut_({ ok: true, sheet: SHEET_NAME, rows: countPlaces_() });
+      case 'pull':   return jsonOut_({ ok: true, places: readAll_() });
+      case 'push':   return jsonOut_(upsertMany_(body.places || []));
+      case 'delete': return jsonOut_(deleteMany_(body.ids || []));
+      default:       return jsonOut_({ ok: false, error: 'action không hợp lệ: ' + body.action });
+    }
+  } catch (err) {
+    return jsonOut_({ ok: false, error: String((err && err.message) || err) });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function jsonOut_(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TRUY CẬP SHEET
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Lấy tab dữ liệu, tự tạo kèm hàng tiêu đề nếu chưa có */
+function getSheet_() {
+  var book = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = book.getSheetByName(SHEET_NAME);
+
+  if (!sheet) {
+    sheet = book.insertSheet(SHEET_NAME);
+  }
+
+  if (sheet.getLastRow() === 0) {
+    var labels = COLUMNS.map(function (c) { return c.label; });
+    sheet.getRange(1, 1, 1, labels.length).setValues([labels])
+      .setFontWeight('bold')
+      .setBackground('#f1f3f4');
+    sheet.setFrozenRows(1);
+    sheet.setColumnWidth(1, 170);  // ID
+    sheet.setColumnWidth(2, 220);  // Tên quán
+  }
+
+  return sheet;
+}
+
+function countPlaces_() {
+  return Math.max(0, getSheet_().getLastRow() - 1);
+}
+
+/** id → số dòng thật trong Sheet */
+function buildRowIndex_(sheet) {
+  var index = {};
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return index;
+
+  var ids = sheet.getRange(2, ID_COLUMN, lastRow - 1, 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    var id = String(ids[i][0] || '').trim();
+    if (id) index[id] = i + 2;
+  }
+  return index;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ĐỌC / GHI MỘT QUÁN
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function toNumberOrNull_(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') return isFinite(value) ? value : null;
+  // Người nhập tay có thể gõ "4,6" theo kiểu Việt Nam
+  var num = parseFloat(String(value).replace(',', '.').replace(/[^\d.\-]/g, ''));
+  return isFinite(num) ? num : null;
+}
+
+function toBool_(value) {
+  if (value === true) return true;
+  if (value === false || value === '' || value === null || value === undefined) return false;
+  var text = String(value).trim().toLowerCase();
+  return text === 'true' || text === 'có' || text === 'co' || text === 'x' || text === '1' || text === 'yes';
+}
+
+/** Đối tượng quán → một hàng giá trị đúng thứ tự COLUMNS */
+function placeToRow_(place) {
+  return COLUMNS.map(function (col) {
+    switch (col.key) {
+      case 'tags':
+        return Array.isArray(place.tags) ? place.tags.join(', ') : String(place.tags || '');
+      case 'rating':
+      case 'reviewCount':
+      case 'lat':
+      case 'lng': {
+        var num = toNumberOrNull_(place[col.key]);
+        return num === null ? '' : num;
+      }
+      case 'verified':
+      case 'featured':
+        return toBool_(place[col.key]);
+      case 'updatedAt':
+        return new Date();
+      default:
+        return place[col.key] === null || place[col.key] === undefined ? '' : String(place[col.key]);
+    }
+  });
+}
+
+/** Một hàng trong Sheet → đối tượng quán */
+function rowToPlace_(row) {
+  var place = {};
+
+  COLUMNS.forEach(function (col, i) {
+    var raw = row[i];
+
+    switch (col.key) {
+      case 'tags':
+        place.tags = String(raw || '')
+          .split(/[,;]/)
+          .map(function (t) { return t.trim(); })
+          .filter(function (t) { return t; });
+        break;
+      case 'rating':
+      case 'reviewCount':
+      case 'lat':
+      case 'lng':
+        place[col.key] = toNumberOrNull_(raw);
+        break;
+      case 'verified':
+      case 'featured':
+        place[col.key] = toBool_(raw);
+        break;
+      case 'updatedAt':
+        place.updatedAt = raw instanceof Date ? raw.toISOString() : String(raw || '');
+        break;
+      default:
+        place[col.key] = String(raw === null || raw === undefined ? '' : raw).trim();
+    }
+  });
+
+  return place;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BA THAO TÁC
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function readAll_() {
+  var sheet = getSheet_();
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+
+  var values = sheet.getRange(2, 1, lastRow - 1, COLUMNS.length).getValues();
+
+  return values
+    .map(rowToPlace_)
+    .filter(function (p) { return p.id && p.name; });
+}
+
+/**
+ * Thêm mới hoặc cập nhật theo ID.
+ * Quán đã có → ghi đè đúng dòng đó. Quán chưa có → nối vào cuối.
+ */
+function upsertMany_(places) {
+  var sheet = getSheet_();
+  var index = buildRowIndex_(sheet);
+
+  var updated = 0;
+  var appendRows = [];
+
+  places.forEach(function (place) {
+    var id = String((place && place.id) || '').trim();
+    if (!id || !place.name) return;
+
+    var row = placeToRow_(place);
+    var rowNumber = index[id];
+
+    if (rowNumber) {
+      sheet.getRange(rowNumber, 1, 1, COLUMNS.length).setValues([row]);
+      updated++;
+    } else {
+      appendRows.push(row);
+      // Giữ chỗ để cùng một id gửi hai lần trong một lô không bị nhân đôi
+      index[id] = sheet.getLastRow() + appendRows.length;
+    }
+  });
+
+  if (appendRows.length > 0) {
+    sheet
+      .getRange(sheet.getLastRow() + 1, 1, appendRows.length, COLUMNS.length)
+      .setValues(appendRows);
+  }
+
+  return { ok: true, added: appendRows.length, updated: updated, total: countPlaces_() };
+}
+
+/** Xoá theo ID. Xoá từ dòng dưới lên để số dòng phía trên không bị dịch. */
+function deleteMany_(ids) {
+  var sheet = getSheet_();
+  var index = buildRowIndex_(sheet);
+
+  var rowNumbers = ids
+    .map(function (id) { return index[String(id || '').trim()]; })
+    .filter(function (rowNumber) { return rowNumber; })
+    .sort(function (a, b) { return b - a; });
+
+  rowNumbers.forEach(function (rowNumber) {
+    sheet.deleteRow(rowNumber);
+  });
+
+  return { ok: true, deleted: rowNumbers.length, total: countPlaces_() };
+}

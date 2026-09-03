@@ -23,7 +23,7 @@ Website tổng hợp, tuyển chọn và đánh giá các quán ăn, quán cà p
 
 5. **Quản lý dữ liệu**
    - Thêm / sửa / xoá quán ngay trên giao diện, lưu vào `LocalStorage`.
-   - 💾 **Xuất JSON** để sao lưu, 📥 **Nhập JSON** để khôi phục hoặc chuyển sang máy khác.
+   - ☁️ **Đồng bộ Google Sheet** — mỗi thay đổi tự ghi lên Sheet cá nhân của bạn. Xem [mục bên dưới](#️-đồng-bộ-google-sheet).
    - 📊 **Xuất CSV** (UTF-8 BOM) mở thẳng bằng Google Sheets / Excel không lỗi tiếng Việt.
 
 6. **Responsive & Dark Mode** — tối ưu mobile-first, có thanh điều hướng dưới cho điện thoại.
@@ -115,8 +115,8 @@ Backend `api/place.js` chỉ làm một việc: đi theo redirect của link rú
 
 1. Đẩy mã nguồn lên GitHub.
 2. Vào [vercel.com/new](https://vercel.com/new) → chọn repository → **Deploy**.
-   Vercel tự nhận thư mục gốc là trang tĩnh và `api/place.js` là serverless function.
-3. Xong. Không có biến môi trường nào bắt buộc.
+   Vercel tự nhận thư mục gốc là trang tĩnh, còn `api/place.js` và `api/sheet.js` là serverless function.
+3. Xong. Không có biến môi trường nào **bắt buộc** — muốn bật đồng bộ Google Sheet thì thêm `SHEETS_WEBHOOK_URL` và `SHEETS_TOKEN`, xem [mục bên dưới](#️-đồng-bộ-google-sheet).
 
 Nếu tách domain (ví dụ trang trên GitHub Pages, API trên Vercel), thêm biến `ALLOWED_ORIGINS` trên Vercel và điền địa chỉ endpoint đầy đủ vào ô trong modal 🔌.
 
@@ -132,15 +132,54 @@ Nếu tách domain (ví dụ trang trên GitHub Pages, API trên Vercel), thêm 
 
 ---
 
+## ☁️ Đồng bộ Google Sheet
+
+`LocalStorage` sống trong đúng một trình duyệt, đúng một máy. Xoá cache là mất sạch. Google Sheet đóng vai trò **sổ cái**: mỗi lần bạn thêm, sửa, xoá một quán, thay đổi được ghi thẳng lên Sheet cá nhân của bạn — và bạn có thể sửa hàng loạt ngay trong Sheet rồi bấm *Lấy từ Sheet về*.
+
+Tính năng này **tuỳ chọn**. Không cấu hình thì trang vẫn chạy đúng như cũ, chỉ lưu ở trình duyệt.
+
+### Cách nối — 7 bước, làm một lần
+
+Hướng dẫn đầy đủ nằm ngay đầu file [`tools/sheet-appscript.gs`](tools/sheet-appscript.gs), tóm tắt:
+
+1. Tạo Sheet trống tại `sheets.new` (không cần tạo cột — script tự tạo).
+2. **Tiện ích mở rộng → Apps Script**, xoá `Code.gs`, dán toàn bộ `tools/sheet-appscript.gs`.
+3. Sửa `SHEET_TOKEN` thành một chuỗi bí mật tự nghĩ.
+4. **Triển khai → Ứng dụng web**, chọn *Thực thi với tư cách: Tôi* và *Ai có quyền truy cập: **Bất kỳ ai***.
+5. Copy đường dẫn `.../exec`.
+6. Vercel → **Settings → Environment Variables**: thêm `SHEETS_WEBHOOK_URL` và `SHEETS_TOKEN`.
+7. **Redeploy**, rồi bấm *Đẩy toàn bộ lên Sheet* trong modal 🔌.
+
+### Vì sao Apps Script, không phải Sheets API
+
+Sheets API cần khoá OAuth hoặc file khoá service account — nhiều thứ bí mật hơn để giữ mà kết quả không hơn. Apps Script Web App chạy dưới danh nghĩa chính bạn nên đã có sẵn quyền vào Sheet của bạn. (Khác Places API, Sheets API **không** thuộc Maps Core Services nên không vướng ràng buộc lãnh thổ — vấn đề duy nhất chỉ là công sức cấu hình.)
+
+### Bí mật nằm ở đâu
+
+Đường dẫn `/exec` và token là thứ mở được Sheet — ai có chúng cũng ghi được. Cả hai nằm trong **biến môi trường trên Vercel**, không nằm trong mã nguồn trang. Trình duyệt của người xem chỉ thấy `/api/sheet` trên chính domain của bạn; `api/sheet.js` ghép token vào rồi mới gọi Google.
+
+### Quy tắc an toàn dữ liệu
+
+| Tình huống | Hành vi |
+|---|---|
+| Mất mạng lúc thêm quán | Quán vẫn lưu ở máy; thao tác nằm trong hàng đợi ở `LocalStorage`, nút ☁️ hiện số việc chờ, tự đẩy lại ở lần đồng bộ sau. |
+| Kéo về khi Sheet khác máy | Hỏi xác nhận trước, rồi lấy bản trên Sheet làm chuẩn. |
+| Quán chỉ có ở máy, chưa có trên Sheet | **Không bị xoá.** Kéo về không bao giờ xoá dữ liệu ở máy — chiều xoá chỉ đi từ nút 🗑️. |
+| Bấm ☁️ | Đẩy phần đang chờ lên **trước**, rồi mới kéo về — để thay đổi vừa làm không bị bản cũ trên Sheet đè. |
+
+---
+
 ## 🚀 Chạy thử trên máy
 
-| Cách | Lệnh | Có `/api/place`? |
+| Cách | Lệnh | Có `/api/place` & `/api/sheet`? |
 |---|---|---|
-| **Đầy đủ** (khuyên dùng) | `vercel dev` | ✅ Có — đọc được link rút gọn |
+| **Đầy đủ** (khuyên dùng) | `vercel dev` | ✅ Có — đọc được link rút gọn, đồng bộ được Sheet |
 | Chỉ giao diện | `npx serve .` hoặc Live Server | ❌ Không |
 | Mở thẳng file | nhấp đúp `index.html` | ❌ Không |
 
-Hai cách sau vẫn dùng được trang, nhưng autofill chỉ tra được địa chỉ qua OpenStreetMap và **không đọc được link rút gọn** `maps.app.goo.gl`.
+Hai cách sau vẫn dùng được trang, nhưng autofill chỉ tra được địa chỉ qua OpenStreetMap, **không đọc được link rút gọn** `maps.app.goo.gl`, và không đồng bộ lên Sheet — thay đổi nằm lại trong hàng đợi cho tới khi chạy bản có máy chủ.
+
+> `vercel dev` đọc biến môi trường từ file `.env` ở thư mục gốc. Chép `.env.example` thành `.env` rồi điền `SHEETS_WEBHOOK_URL` / `SHEETS_TOKEN` nếu muốn thử đồng bộ trên máy. `.env` đã nằm trong `.gitignore`.
 
 ---
 
@@ -203,7 +242,10 @@ foodguide/
 │   ├── data.js             # Dữ liệu quán dựng sẵn, danh mục, quận, profile
 │   └── app.js              # Logic phía client: render, lọc, autofill, quản lý
 ├── api/
-│   └── place.js            # Serverless function - giải mã link rút gọn
+│   ├── place.js            # Serverless function - giải mã link rút gọn
+│   └── sheet.js            # Serverless function - cầu nối tới Google Sheet
+├── tools/
+│   └── sheet-appscript.gs  # Dán vào Apps Script của Sheet bạn muốn dùng
 ├── vercel.json             # Cấu hình Vercel
 ├── .env.example            # Mẫu biến môi trường (tuỳ chọn)
 ├── .gitignore

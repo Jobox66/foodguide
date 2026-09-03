@@ -3,6 +3,9 @@
   "functions": {
     "api/place.js": {
       "maxDuration": 20
+    },
+    "api/sheet.js": {
+      "maxDuration": 30
     }
   },
   "headers": [

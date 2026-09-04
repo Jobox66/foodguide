@@ -35,8 +35,45 @@ _load_dotenv()
 # Lý do: máy chủ đã giữ sẵn token và địa chỉ Apps Script; thêm một đường
 # nữa nghĩa là thêm một file khoá bí mật phải giữ, mà kết quả không hơn.
 # ─────────────────────────────────────────────────────────────────────────
-API_BASE = os.environ.get("FOODGUIDE_API", "http://localhost:3000").rstrip("/")
+def normalize_api_base(value):
+    """
+    Dọn địa chỉ trang cho dễ dùng: thêm https:// nếu thiếu, bỏ /api/sheet ở
+    đuôi, bỏ dấu / thừa. Dán "angihanoi.vercel.app" hay dán nguyên đường dẫn
+    đầy đủ đều ra cùng một kết quả.
+    """
+    url = str(value or "").strip().rstrip("/")
+    if not url:
+        return ""
+    url = url.removesuffix("/api/sheet").rstrip("/")
+    if not url.startswith(("http://", "https://")):
+        # localhost thì http, còn lại mặc định https
+        url = ("http://" if url.startswith("localhost") or url.startswith("127.") else "https://") + url
+    return url
+
+
+def _api_base():
+    """
+    Địa chỉ gốc của trang. Nhận cả FOODGUIDE_API lẫn SHEETS_API_URL (tên biến
+    có sẵn trong .env, trỏ thẳng tới /api/sheet) để không ai phải sửa .env.
+    """
+    for name in ("FOODGUIDE_API", "SHEETS_API_URL"):
+        cleaned = normalize_api_base(os.environ.get(name, ""))
+        if cleaned:
+            return cleaned
+    return "http://localhost:3000"
+
+
+API_BASE = _api_base()
 SHEET_TAB = os.environ.get("FOODGUIDE_SHEET_TAB", "Crawl_Inbox")
+
+# ─────────────────────────────────────────────────────────────────────────
+# Threads — main.py đang import các biến này. Bước 4 chưa làm, nhưng để
+# thiếu thì cả main.py không import nổi.
+# ─────────────────────────────────────────────────────────────────────────
+THREADS_SEARCH_QUERIES = [
+    q.strip() for q in os.environ.get("THREADS_SEARCH_QUERIES", "").split(",") if q.strip()
+]
+THREADS_MAX_POSTS = int(os.environ.get("THREADS_MAX_POSTS", "20"))
 
 # ─────────────────────────────────────────────────────────────────────────
 # Gemini (bước 3 — làm sạch văn bản tự do)
@@ -70,9 +107,12 @@ USER_AGENT = (
 #
 # Nên chỉ đi đường phân trang thuần /page/N, không thêm query nào.
 # ─────────────────────────────────────────────────────────────────────────
+# Đường dẫn đã kiểm bằng trình duyệt thật: /en/vn/<thành phố>/restaurants trả
+# HTTP 200 với 163 link quán ở Hà Nội. Bản tiếng Việt /vn/vi/... KHÔNG tồn tại
+# (trả về trang "Page Not Found"), đừng đổi lại.
 MICHELIN_START_URLS = [
-    "https://guide.michelin.com/vn/vi/ha-noi-region/restaurants",
-    "https://guide.michelin.com/vn/vi/ho-chi-minh-city/restaurants",
+    "https://guide.michelin.com/en/vn/ha-noi/restaurants",
+    "https://guide.michelin.com/en/vn/ho-chi-minh/restaurants",
 ]
 
 # Quận nội thành Hà Nội, để tách quận ra khỏi địa chỉ

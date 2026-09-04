@@ -15,10 +15,18 @@ import json
 import sys
 from pathlib import Path
 
+# Console Windows mặc định là cp1252, in tiếng Việt có dấu là văng UnicodeEncodeError
+# ngay trước khi kịp làm gì. Ép UTF-8 để chạy được ở mọi cửa sổ dòng lệnh.
+for stream in (sys.stdout, sys.stderr):
+    try:
+        stream.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config import OUT_DIR, SHEET_TAB   # noqa: E402
-import sync                              # noqa: E402
+import push_to_sheet as pusher            # noqa: E402
 
 
 def save(places, name):
@@ -44,13 +52,53 @@ def summarise(places):
         print(f"    • {place['name']}  |  {place['district'] or '—'}  |  {place['category'] or '—'}")
 
 
+def apply_api_override(args):
+    """--api https://trang-cua-ban.vercel.app  → dùng ngay, khỏi sửa .env"""
+    if "--api" not in args:
+        return
+    index = args.index("--api")
+    if index + 1 >= len(args):
+        print("Thiếu địa chỉ sau --api")
+        sys.exit(1)
+
+    import config
+    config.API_BASE = config.normalize_api_base(args[index + 1])
+    pusher.config.API_BASE = config.API_BASE
+    print(f"Dùng máy chủ: {config.API_BASE}\n")
+
+
 def main():
     args = sys.argv[1:]
     command = args[0] if args else "help"
     should_push = "--push" in args
+    apply_api_override(args)
 
     if command == "check":
-        print(json.dumps(sync.check(), ensure_ascii=False, indent=2))
+        import config
+        result = pusher.check()
+        print(f"Máy chủ : {config.API_BASE}/api/sheet")
+        print(f"Tab đích: {config.SHEET_TAB}\n")
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+
+        if result.get("ok") and result.get("configured"):
+            # /api/sheet?health=1 chỉ nói máy chủ có đủ biến môi trường chưa, nó
+            # không chạm tới Google. Phải hỏi thật Apps Script mới biết nó đang là
+            # bản nào — bản cũ không hiểu tab Crawl_Inbox và ghi hết vào tab chính
+            # mà vẫn trả về ok:true.
+            good, why, probe = pusher.probe_script(config.SHEET_TAB)
+            if good:
+                print(f"Apps Script: bản mới — hiểu tab {config.SHEET_TAB}"
+                      f" ({probe.get('rows')} dòng đang có trong đó)")
+                print("\n✓ Sẵn sàng. Chạy:  python crawler/run.py michelin")
+            else:
+                print("\n✗ Cào được, nhưng CHƯA đẩy lên Sheet được:")
+                print("  " + why)
+        elif result.get("ok"):
+            print("\n✗ Máy chủ chạy nhưng chưa nối Sheet:", result.get("reason", ""))
+        else:
+            print("\n✗ Không gọi được máy chủ.")
+            print("  • Trang đã deploy: python crawler/run.py check --api https://ten-trang.vercel.app")
+            print("  • Chạy tại máy   : npx vercel dev   (rồi dùng --api http://localhost:3000)")
         return
 
     if command == "michelin":
@@ -60,7 +108,7 @@ def main():
         summarise(places)
         save(places, "michelin")
         if should_push:
-            sync.push(places)
+            pusher.push(places)
         elif places:
             print(f"\nXem file rồi đẩy bằng:  python crawler/run.py push out/michelin.json")
         return
@@ -77,7 +125,7 @@ def main():
         summarise(places)
         save(places, "parsed")
         if should_push:
-            sync.push(places)
+            pusher.push(places)
         return
 
     if command == "push":
@@ -85,7 +133,7 @@ def main():
             print("Thiếu tên file. Ví dụ: python crawler/run.py push out/michelin.json")
             return
         places = json.loads(Path(args[1]).read_text(encoding="utf-8"))
-        sync.push(places)
+        pusher.push(places)
         return
 
     print(__doc__)

@@ -14,3 +14,6 @@ npm-debug.log*
 crawler/.env
 crawler/out/
 crawler/__pycache__/
+crawler/.venv/
+crawler/output/
+**/__pycache__/

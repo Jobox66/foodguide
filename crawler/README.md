@@ -20,14 +20,51 @@ cp crawler/.env.example crawler/.env    # rồi điền FOODGUIDE_API và GEMINI
 ## Dùng
 
 ```bash
-python crawler/run.py check                    # máy chủ sống chưa, đã nối Sheet chưa
-python crawler/run.py michelin                 # cào, lưu ra out/michelin.json — CHƯA đẩy
-python crawler/run.py michelin --show          # cào và xem trình duyệt chạy (gỡ lỗi)
-python crawler/run.py push out/michelin.json   # xem file thấy ổn rồi mới đẩy
-python crawler/run.py parse bai-viet.txt       # văn bản tự do → JSON qua Gemini
+# 1. Kiểm tra kết nối (không đụng dữ liệu)
+python crawler/run.py check
+
+# 2. Cào — lưu ra crawler/out/michelin.json, CHƯA đẩy đi đâu
+python crawler/run.py michelin
+
+# 3. Mở file xem, thấy ổn thì đẩy vào Crawl_Inbox
+python crawler/run.py push crawler/out/michelin.json
+
+# 4. Mở Google Sheet → tab Crawl_Inbox → tick cột Duyệt
+#    → menu 🍜 FoodGuide → Duyệt các quán đã tick
+```
+
+Vài cờ hữu ích:
+
+```bash
+--api https://trang-cua-ban.vercel.app   # dùng máy chủ khác, khỏi sửa .env
+--show                                   # hiện cửa sổ trình duyệt (gỡ lỗi selector)
+--push                                   # cào xong đẩy luôn, bỏ qua bước xem file
+CRAWL_MAX_PAGES=2 python ...             # chỉ cào 2 trang cho nhanh
 ```
 
 Mặc định **không đẩy thẳng**. Bạn xem file JSON trước, thấy ổn mới `push`.
+
+## Apps Script phải là bản mới, nếu không dữ liệu vào nhầm tab
+
+Đây là cái bẫy nguy hiểm nhất của cả gói này, vì nó **không báo lỗi**.
+
+Bản Apps Script cũ (trước khi có phần `Crawl_Inbox`) không biết tham số `sheet`.
+Nó không từ chối — nó bỏ qua, ghi hết vào tab chính, rồi trả về `ok:true`. Màn
+hình vẫn in "Đã đẩy vào tab Crawl_Inbox" trong khi 147 quán cào về đã nằm gọn
+trong cẩm nang thật. Chuyện này đã xảy ra một lần, phải xoá tay 147 dòng.
+
+Nên `push()` giờ **dò phiên bản trước khi ghi dòng nào**, dựa vào dấu vân tay:
+bản mới trả `inbox: true` và `inboxRows` trong phản hồi `health`, bản cũ không có.
+Sai bản thì dừng hẳn, không ghi gì. `run.py check` cũng báo trước điều này.
+
+Sau khi đẩy còn **đếm lại số dòng thật** trên Sheet chứ không tin vào phản hồi —
+Vercel hay trả 504 khi Apps Script chạy quá 60 giây, mà 504 không có nghĩa là
+Google chưa ghi. Lô cũng hạ xuống 60 quán cho đỡ chạm trần thời gian.
+
+Cách cập nhật: mở Sheet → Tiện ích mở rộng → Apps Script → dán đè toàn bộ
+[`../tools/sheet-appscript.gs`](../tools/sheet-appscript.gs) → Triển khai →
+Quản lý bản triển khai → ✏️ sửa bản đang dùng → **Phiên bản: Mới** → Triển khai.
+Chọn "Bản triển khai mới" là ra URL khác, trang web sẽ mất kết nối.
 
 Sau khi đẩy: mở Sheet → tab `Crawl_Inbox` → tick cột **Duyệt** ở những quán ưng ý → menu **🍜 FoodGuide → Duyệt các quán đã tick**.
 
@@ -67,11 +104,29 @@ AWS WAF với thử thách JavaScript. `requests` + BeautifulSoup nhận đúng 
 - Nghỉ 3 giây giữa các trang (`CRAWL_DELAY`).
 - Trình duyệt bình thường: **không** plugin giấu dấu vết, **không** xoay proxy, **không** giải captcha. Michelin vẫn chặn thì đó là họ từ chối — dừng lại, đừng lách thêm.
 
-## Chưa kiểm được gì
+## Đã kiểm tới đâu
 
-`schema.py`, `ai_parser.py` (schema + prompt), `sync.py` đã có 50 test tự động chạy được không cần mạng — gồm cả test đối chiếu id danh mục giữa Python và `js/data.js`, để hai bên không lệch nhau.
+`schema.py`, `ai_parser.py` (schema + prompt), `push_to_sheet.py` có 50 test tự động chạy được không cần mạng — gồm test đối chiếu id danh mục giữa Python và `js/data.js`, để hai bên không lệch nhau.
 
-**`michelin.py` chưa chạy thật lần nào** vì Playwright chưa được cài trong môi trường này. Bộ chọn (selector) dựa trên cấu trúc `a[href*="/restaurant/"]` — nhiều khả năng đúng, nhưng phải chạy `python crawler/run.py michelin --show` một lần để xem và chỉnh lại nếu Michelin đổi giao diện.
+**`michelin.py` đã chạy thật** trên guide.michelin.com, kết quả một lượt 2 trang mỗi thành phố:
+
+```
+147 quán  ·  87 Selected  ·  48 Bib Gourmand  ·  11 một sao  ·  1 hai sao
+59 low / 49 mid / 35 high   ·   0 id trùng
+rating bịa = 0  |  verified bịa = 0  |  ảnh hotlink = 0
+```
+
+Hai điều học được khi chạy thật, ghi lại kẻo quên:
+
+- **Playwright qua được AWS WAF.** Rào cản thật không phải WAF mà là URL: `/vn/vi/...` là trang "Page Not Found", đường dùng được là `/en/vn/<thành phố>/restaurants`.
+- **Hết trang thì Michelin lặp lại trang cuối**, không trả trang rỗng. Nên mốc dừng phải là “không thêm được quán mới nào” chứ không phải “không có thẻ nào” — trước khi sửa, mỗi thành phố tải thừa 8 trang vô ích.
+- **Hạng Michelin là icon SVG, không phải chữ** (`michelin-star_8519.svg`). Đọc `.innerText` thì mọi quán đều ra "Selected" và mất sạch 48 Bib Gourmand + 12 quán có sao. Phải đọc `img.michelin-award` rồi lấy `src`.
+
+Michelin đổi giao diện thì chạy `python crawler/run.py michelin --show` để xem cửa sổ trình duyệt và chỉnh lại selector trong `read_cards()`.
+
+## Trang danh sách không có địa chỉ
+
+Chỉ có tên thành phố ("Hanoi, Vietnam"), nên `district` và `address` luôn rỗng — cả 147 quán đều vậy. Điền nốt bằng cách dán link Google Maps vào ô tương ứng rồi bấm Quét trong trang, hoặc tự gõ khi duyệt.
 
 ## Threads
 

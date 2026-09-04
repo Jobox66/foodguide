@@ -189,7 +189,8 @@ document.addEventListener("DOMContentLoaded", () => {
   updateCategoryCounts();
   renderAll();
   refreshBackendStatus(); // chạy nền, không chặn lần render đầu
-  refreshSheetStatus().then(() => flushSheetQueue({ silent: true }));
+  syncOnOpen();           // đẩy phần đang chờ rồi kéo thay đổi từ Sheet về
+  watchForReturnToTab();
 });
 
 /**
@@ -1828,12 +1829,72 @@ async function pullFromSheet(options) {
 }
 
 /**
+ * Khoảng nghỉ giữa hai lần đồng bộ tự động. Đủ ngắn để hai máy không lệch nhau
+ * lâu, đủ dài để đổi qua đổi lại giữa các tab không thành gọi máy chủ liên tục.
+ */
+const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+let lastAutoSyncAt = 0;
+
+/**
+ * Đồng bộ nền lúc mở trang.
+ *
+ * Trước đây lúc mở trang chỉ ĐẨY phần đang chờ lên Sheet chứ không KÉO về. Hậu
+ * quả: thêm quán ở máy tính thì máy tính thấy, nhưng mở trên điện thoại lại không có —
+ * mỗi máy đọc bản lưu riêng trong trình duyệt của nó, mà Sheet thì chỉ được hỏi tới
+ * khi người dùng tự bấm nút ☁️.
+ *
+ * Thứ tự giống hệt nút ☁️: đẩy trước để thay đổi ở máy không bị bản cũ trên Sheet
+ * đè, và đẩy hỏng thì không kéo.
+ */
+async function syncOnOpen() {
+  if (state.sheetStatus.syncing) return null;
+
+  lastAutoSyncAt = Date.now();
+  state.sheetStatus.syncing = true;
+  updateSheetButton();
+
+  try {
+    await refreshSheetStatus();
+    if (!state.sheetStatus.configured) return null;
+
+    const pushed = await flushSheetQueue({ silent: true });
+    if (pushed === null) return null;
+
+    const result = await pullFromSheet({ silent: true });
+    if (result && (result.added || result.updated)) {
+      showToast(`📥 Đã lấy từ Google Sheet: ${result.added} quán mới, ${result.updated} quán cập nhật.`);
+    }
+    return result;
+  } catch (e) {
+    console.warn("Đồng bộ nền thất bại:", e.message);
+    return null;
+  } finally {
+    state.sheetStatus.syncing = false;
+    updateSheetButton();
+  }
+}
+
+/**
+ * Điện thoại hiếm khi tải lại trang: tab nằm sẵn trong trình duyệt hàng tuần, mở lại
+ * từ danh sách ứng dụng KHÔNG chạy DOMContentLoaded. Chỉ đồng bộ lúc tải trang thì
+ * điện thoại vẫn đứng yên ở bản cũ. Nên kéo thêm mỗi lần quay lại tab.
+ */
+function watchForReturnToTab() {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    if (Date.now() - lastAutoSyncAt < AUTO_SYNC_INTERVAL_MS) return;
+    syncOnOpen();
+  });
+}
+
+/**
  * Nút ☁️ trên đầu trang: đẩy phần đang chờ lên trước, rồi lấy thay đổi từ
  * Sheet về. Đẩy trước để thay đổi vừa làm ở máy không bị bản cũ trên Sheet đè.
  */
 async function syncWithSheet() {
   if (state.sheetStatus.syncing) return;
 
+  lastAutoSyncAt = Date.now();
   state.sheetStatus.syncing = true;
   updateSheetButton();
 

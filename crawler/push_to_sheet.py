@@ -167,10 +167,25 @@ def push(places, sheet_tab=None):
 
     print(f"\nĐã đẩy vào tab {tab}: {total_added} quán mới, {total_updated} cập nhật.")
 
+    # Đối chiếu bằng hai câu hỏi khác nhau, đừng gộp làm một:
+    #   1. Có quán nào rơi mất không?   → added + updated phải đủ số quán gửi đi
+    #   2. Có quán nào bị nhân đôi không? → số dòng tăng thêm không được vượt quá
+    #
+    # KHÔNG so số dòng tăng thêm với riêng `added`. Một lô bị Vercel trả 504 rồi
+    # được gửi lại sẽ ghi một lần nhưng đếm hai lần: lần đầu là "mới", lần sau
+    # thấy id đã có nên tính là "cập nhật". Lúc đó 120 mới + 27 cập nhật vẫn là
+    # đúng 147 quán, chỉ có phép so ngây thơ mới kêu sai.
+    handled = total_added + total_updated
     if isinstance(rows_before, int) and isinstance(rows_after, int):
-        print(f"  Đếm lại trên Sheet: {rows_before} → {rows_after} dòng (+{rows_after - rows_before})")
-        if rows_after - rows_before != total_added:
-            print("  ⚠ Số đếm không khớp phản hồi — mở Sheet kiểm tra bằng mắt.", file=sys.stderr)
+        grew = rows_after - rows_before
+        print(f"  Đếm lại trên Sheet: {rows_before} → {rows_after} dòng (+{grew})")
+        if grew > len(places):
+            print(f"  ⚠ Sheet tăng {grew} dòng trong khi chỉ gửi {len(places)} quán"
+                  " — có thể bị nhân đôi, mở Sheet kiểm tra.", file=sys.stderr)
+
+    if handled < len(places):
+        print(f"  ⚠ Gửi {len(places)} quán nhưng chỉ ghi nhận {handled}"
+              " — chạy lại lệnh này để bù nốt.", file=sys.stderr)
 
     if failed:
         print(f"  ⚠ {failed} quán chưa đẩy được, chạy lại lệnh này để bù nốt.", file=sys.stderr)

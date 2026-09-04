@@ -228,30 +228,45 @@ function getSheet_(sheetName) {
     sheet.setFrozenRows(1);
     sheet.setColumnWidth(1, 170);  // ID
     sheet.setColumnWidth(2, 220);  // Tên quán
-
-    if (isInbox) {
-      // Ô tick sẵn để duyệt bằng một chạm, kể cả trên điện thoại
-      sheet.getRange(2, COLUMNS.length + 1, 1000, 1).insertCheckboxes();
-    }
   }
 
   return sheet;
 }
 
+/**
+ * Dòng cuối CÓ DỮ LIỆU, tính theo cột ID — không dùng getLastRow().
+ *
+ * getLastRow() đếm mọi ô có nội dung, và ô tick RỖNG vẫn là nội dung. Bản trước
+ * chèn sẵn 1000 ô tick vào cột Duyệt lúc tạo tab Crawl_Inbox, nên một tab trống
+ * trơn vẫn báo 999 dòng, và upsertMany_ nối dữ liệu xuống dòng 1001 — mở tab ra
+ * chỉ thấy khoảng trắng mênh mông, phải cuộn cả nghìn dòng mới tới quán đầu tiên.
+ * Đó là lý do chỗ nào cũng phải hỏi cột ID thay vì hỏi getLastRow().
+ */
+function lastDataRow_(sheet) {
+  var physical = sheet.getLastRow();
+  if (physical < 2) return 1;
+
+  var ids = sheet.getRange(2, ID_COLUMN, physical - 1, 1).getValues();
+  for (var i = ids.length - 1; i >= 0; i--) {
+    if (String(ids[i][0] || '').trim()) return i + 2;
+  }
+  return 1;
+}
+
 function countPlaces_(sheetName) {
-  return Math.max(0, getSheet_(sheetName).getLastRow() - 1);
+  return Math.max(0, lastDataRow_(getSheet_(sheetName)) - 1);
 }
 
 /** Đếm số dòng trong tab chờ duyệt, KHÔNG tạo tab nếu chưa có */
 function countInboxRows_() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(INBOX_SHEET_NAME);
-  return sheet ? Math.max(0, sheet.getLastRow() - 1) : 0;
+  return sheet ? Math.max(0, lastDataRow_(sheet) - 1) : 0;
 }
 
 /** id → số dòng thật trong Sheet */
 function buildRowIndex_(sheet) {
   var index = {};
-  var lastRow = sheet.getLastRow();
+  var lastRow = lastDataRow_(sheet);
   if (lastRow < 2) return index;
 
   var ids = sheet.getRange(2, ID_COLUMN, lastRow - 1, 1).getValues();
@@ -346,7 +361,7 @@ function rowToPlace_(row) {
 
 function readAll_(sheetName) {
   var sheet = getSheet_(sheetName);
-  var lastRow = sheet.getLastRow();
+  var lastRow = lastDataRow_(sheet);
   if (lastRow < 2) return [];
 
   var values = sheet.getRange(2, 1, lastRow - 1, COLUMNS.length).getValues();
@@ -364,6 +379,10 @@ function upsertMany_(places, sheetName) {
   var sheet = getSheet_(sheetName);
   var index = buildRowIndex_(sheet);
 
+  // Chốt chỗ nối NGAY SAU dòng có dữ liệu cuối cùng. Dùng getLastRow() ở đây là
+  // nhảy qua cả nghìn ô tick rỗng rồi ghi vào quãng không ai nhìn thấy.
+  var appendStart = lastDataRow_(sheet) + 1;
+
   var updated = 0;
   var appendRows = [];
 
@@ -380,14 +399,21 @@ function upsertMany_(places, sheetName) {
     } else {
       appendRows.push(row);
       // Giữ chỗ để cùng một id gửi hai lần trong một lô không bị nhân đôi
-      index[id] = sheet.getLastRow() + appendRows.length;
+      index[id] = appendStart + appendRows.length - 1;
     }
   });
 
   if (appendRows.length > 0) {
     sheet
-      .getRange(sheet.getLastRow() + 1, 1, appendRows.length, COLUMNS.length)
+      .getRange(appendStart, 1, appendRows.length, COLUMNS.length)
       .setValues(appendRows);
+
+    // Ô tick chỉ đặt lên đúng những dòng có quán. Rải sẵn cả nghìn ô tick vào
+    // vùng trống là cách làm hỏng mọi phép đếm dòng về sau.
+    if (sheetName === INBOX_SHEET_NAME) {
+      sheet.getRange(appendStart, COLUMNS.length + 1, appendRows.length, 1)
+        .insertCheckboxes();
+    }
   }
 
   return { ok: true, added: appendRows.length, updated: updated, total: countPlaces_(sheetName) };
@@ -615,17 +641,77 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('🍜 FoodGuide')
     .addItem('✅ Duyệt các quán đã tick', 'DUYET_INBOX')
+    .addItem('🧹 Dọn dòng trống', 'DON_DONG_TRONG')
     .addSeparator()
     .addItem('🔑 Cấp quyền lần đầu', 'CAP_QUYEN_LAN_DAU')
     .addToUi();
 }
 
+/**
+ * Xoá những dòng KHÔNG có ID, gộp dữ liệu lên sát hàng tiêu đề.
+ *
+ * Dùng để chữa hậu quả của bản trước: nó rải sẵn 1000 ô tick vào cột Duyệt, nên
+ * getLastRow() báo 999 dòng khi tab còn trống trơn, và dữ liệu đẩy lên bị nối
+ * xuống dòng 1001. Mở tab ra chỉ thấy khoảng trắng, tưởng chưa đẩy được gì.
+ *
+ * An toàn: chỉ đụng tới dòng có ô ID rỗng. Xoá theo từng đoạn liên tiếp và đi
+ * từ dưới lên, để số dòng phía trên không bị dịch giữa chừng.
+ */
+function compactSheet_(sheet) {
+  var physical = sheet.getLastRow();
+  if (physical < 2) return 0;
+
+  var ids = sheet.getRange(2, ID_COLUMN, physical - 1, 1).getValues();
+  var removed = 0;
+  var runEnd = -1;   // chỉ số cuối của đoạn trống đang gom
+
+  for (var i = ids.length - 1; i >= 0; i--) {
+    var blank = String(ids[i][0] || '').trim() === '';
+
+    if (blank && runEnd === -1) {
+      runEnd = i;
+    } else if (!blank && runEnd !== -1) {
+      sheet.deleteRows(i + 3, runEnd - i);   // ids[k] nằm ở dòng k+2
+      removed += runEnd - i;
+      runEnd = -1;
+    }
+  }
+
+  if (runEnd !== -1) {
+    sheet.deleteRows(2, runEnd + 1);
+    removed += runEnd + 1;
+  }
+
+  return removed;
+}
+
+function DON_DONG_TRONG() {
+  var ui = SpreadsheetApp.getUi();
+  var report = [];
+
+  [SHEET_NAME, INBOX_SHEET_NAME].forEach(function (name) {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+    if (!sheet) return;
+    var removed = compactSheet_(sheet);
+    report.push('• ' + name + ': xoá ' + removed + ' dòng trống, còn ' +
+                Math.max(0, lastDataRow_(sheet) - 1) + ' quán');
+  });
+
+  ui.alert(report.length ? report.join('\n') : 'Không tìm thấy tab nào để dọn.');
+}
+
 function DUYET_INBOX() {
   var ui = SpreadsheetApp.getUi();
   var inbox = getSheet_(INBOX_SHEET_NAME);
+
+  // Hai mốc khác nhau, đừng gộp làm một:
+  //   lastDataRow_  = có quán thật hay chưa (bỏ qua ô tick rỗng)
+  //   getLastRow()  = quét tới đâu, vì người dùng có thể tự gõ tay một dòng
+  //                   thiếu ID rồi tick — dòng đó phải được BÁO là hỏng, chứ
+  //                   không được lặng lẽ biến mất.
   var lastRow = inbox.getLastRow();
 
-  if (lastRow < 2) {
+  if (lastDataRow_(inbox) < 2 && lastRow < 2) {
     ui.alert('Tab ' + INBOX_SHEET_NAME + ' đang trống, chưa có quán nào để duyệt.');
     return;
   }

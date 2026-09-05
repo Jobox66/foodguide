@@ -14,7 +14,7 @@ Bài viết ─┘        (chuẩn hoá)          (không cần service account)
 pip install -r crawler/requirements.txt
 python -m playwright install chromium
 
-cp crawler/.env.example crawler/.env    # rồi điền FOODGUIDE_API và GEMINI_API_KEY
+cp .env.example .env    # cấu hình tại file .env ở thư mục gốc (điền FOODGUIDE_API, GEMINI_API_KEY...)
 ```
 
 ## Dùng

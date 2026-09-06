@@ -82,12 +82,19 @@ API_BASE = _api_base()
 SHEET_TAB = os.environ.get("FOODGUIDE_SHEET_TAB", "Crawl_Inbox")
 
 # ─────────────────────────────────────────────────────────────────────────
-# Threads — main.py đang import các biến này. Bước 4 chưa làm, nhưng để
-# thiếu thì cả main.py không import nổi.
+# Threads Crawler (Bước 2 — Khám phá xu hướng & quán ruột)
 # ─────────────────────────────────────────────────────────────────────────
+DEFAULT_THREADS_QUERIES = [
+    "quán ruột hà nội",
+    "quán ngon hà nội",
+    "quán ăn ngon hà nội",
+    "must try hà nội",
+    "cà phê hà nội đẹp",
+]
+
 THREADS_SEARCH_QUERIES = [
     q.strip() for q in os.environ.get("THREADS_SEARCH_QUERIES", "").split(",") if q.strip()
-]
+] or DEFAULT_THREADS_QUERIES
 THREADS_MAX_POSTS = int(os.environ.get("THREADS_MAX_POSTS", "20"))
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -95,7 +102,7 @@ THREADS_MAX_POSTS = int(os.environ.get("THREADS_MAX_POSTS", "20"))
 # Lấy khoá miễn phí ở https://aistudio.google.com/apikey
 # ─────────────────────────────────────────────────────────────────────────
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 
 # ─────────────────────────────────────────────────────────────────────────
 # Lịch sự khi cào

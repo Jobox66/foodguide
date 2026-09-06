@@ -17,4 +17,6 @@ crawler/.venv/
 # Tool crawl
 crawler/out/
 crawler/output/
+crawler/.browser_data/
+crawler/session.json
 **/__pycache__/

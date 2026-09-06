@@ -94,10 +94,13 @@ python crawler/run.py check
 # 3. Cào dữ liệu Michelin Guide (lưu file cục bộ để kiểm tra)
 python crawler/run.py michelin
 
-# 4. Trích xuất thông tin quán từ file văn bản review bằng Gemini AI
+# 4. Cào bài viết trên Threads & trích xuất quán bằng Gemini AI
+python crawler/run.py threads --query "quán ruột hà nội" --parse
+
+# 5. Trích xuất thông tin quán từ file văn bản review bằng Gemini AI
 python crawler/run.py parse bai_review.txt
 
-# 5. Đẩy dữ liệu vào tab Crawl_Inbox trên Google Sheet
+# 6. Đẩy dữ liệu vào tab Crawl_Inbox trên Google Sheet
 python crawler/run.py push crawler/out/michelin.json
 ```
 
@@ -146,6 +149,7 @@ foodguide/
 ├── crawler/                # Bộ công cụ cào & xử lý dữ liệu AI
 │   ├── run.py              # Điểm thực thi lệnh CLI chính
 │   ├── michelin.py         # Crawler Playwright cho Michelin Guide
+│   ├── threads.py          # Crawler Playwright & GraphQL cho Threads
 │   ├── ai_parser.py        # Trích xuất dữ liệu bằng Gemini API
 │   ├── push_to_sheet.py    # Kiểm tra và đẩy dữ liệu lên Crawl_Inbox
 │   └── config.py           # Cấu hình nạp biến môi trường từ root .env

@@ -5,6 +5,13 @@ Chạy pipeline crawl.
     python crawler/run.py check                 kiểm tra kết nối máy chủ
     python crawler/run.py michelin              cào Michelin, LƯU RA FILE (chưa đẩy)
     python crawler/run.py michelin --push       cào rồi đẩy luôn vào Crawl_Inbox
+    python crawler/run.py threads               cào bài viết Threads theo từ khoá
+    python crawler/run.py threads --login       mở trình duyệt đăng nhập Threads 1 lần
+    python crawler/run.py threads --query "..." cào 1 từ khoá cụ thể
+    python crawler/run.py threads --limit 10    giới hạn số bài viết cào
+    python crawler/run.py threads --url <link>  cào thẳng 1 link bài viết Threads
+    python crawler/run.py threads --parse       cào xong bóc tách quán bằng Gemini AI
+    python crawler/run.py threads --parse --push cào -> Gemini parse -> đẩy vào Crawl_Inbox
     python crawler/run.py parse bai.txt         đọc file văn bản qua Gemini
     python crawler/run.py push out/michelin.json   đẩy một file đã cào trước đó
 
@@ -111,6 +118,64 @@ def main():
             pusher.push(places)
         elif places:
             print(f"\nXem file rồi đẩy bằng:  python crawler/run.py push out/michelin.json")
+        return
+
+    if command == "threads":
+        import threads
+
+        if "--login" in args:
+            threads.login()
+            return
+
+        target_url = None
+        if "--url" in args:
+            idx = args.index("--url")
+            if idx + 1 < len(args):
+                target_url = args[idx + 1]
+
+        query = None
+        if "--query" in args:
+            idx = args.index("--query")
+            if idx + 1 < len(args):
+                query = args[idx + 1]
+
+        import config
+        limit = config.THREADS_MAX_POSTS
+        if "--limit" in args:
+            idx = args.index("--limit")
+            if idx + 1 < len(args):
+                try:
+                    limit = int(args[idx + 1])
+                except ValueError:
+                    pass
+
+        headless = "--show" not in args
+        queries = [query] if query else None
+
+        print("Cào bài viết Threads (khám phá xu hướng & quán ruột)…")
+        posts = threads.crawl(queries=queries, limit=limit, headless=headless, target_url=target_url)
+
+        if not posts:
+            print("\nChưa thu thập được bài viết nào.")
+            return
+
+        # Lưu danh sách bài viết thô
+        save(posts, "threads_posts")
+
+        # Nếu có cờ --parse, chuyển qua Gemini để trích xuất quán
+        if "--parse" in args:
+            import ai_parser
+            print(f"\nChuyển {len(posts)} bài viết qua Gemini để trích xuất thông tin quán…\n")
+            places = ai_parser.parse_many([p["text"] for p in posts], source="threads")
+            summarise(places)
+            save(places, "threads")
+            if should_push:
+                pusher.push(places)
+            elif places:
+                print(f"\nXem file rồi đẩy bằng:  python crawler/run.py push out/threads.json")
+        else:
+            print(f"\nĐã lưu {len(posts)} bài viết thô. Để trích xuất thông tin quán bằng Gemini AI, chạy:")
+            print(f"  python crawler/run.py threads --parse")
         return
 
     if command == "parse":

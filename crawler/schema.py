@@ -89,11 +89,20 @@ def guess_category(*texts):
     Đoán danh mục từ tên quán và mô tả. Không chắc thì trả "" — quán vẫn hiện
     ở "Tất cả", chỉ là chưa xếp danh mục. Gán bừa thì người xem lọc ra kết quả
     sai mà không biết.
+
+    KHỚP THEO RANH GIỚI TỪ, không phải chuỗi con. Vài từ khoá ngắn đến mức khớp
+    chuỗi con là gán bừa hàng loạt:
+
+        "y "  (Ý)      khớp "Ho Chi Minh Cit̲y̲ ", "Nam K̲y̲ Khoi Nghia"
+        "che" (chè)    khớp "C̲h̲e̲ngdu"
+        "mien"(miến)   khớp "Le Van M̲i̲e̲n̲ Street"
+
+    Ba trường hợp trên đều là thật, gặp khi bắt đầu lấy địa chỉ từ Michelin.
     """
-    haystack = " " + strip_accents(" ".join(str(t or "") for t in texts)) + " "
+    haystack = strip_accents(" ".join(str(t or "") for t in texts))
     for category_id, keywords in CATEGORY_KEYWORDS:
         for keyword in keywords:
-            if keyword in haystack:
+            if re.search(r"(?<!\w)" + re.escape(keyword.strip()) + r"(?!\w)", haystack):
                 return category_id
     return ""
 
@@ -126,6 +135,30 @@ def price_level_from_vnd(low_vnd=None, high_vnd=None):
     return "high"
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# Tách quận ra khỏi địa chỉ
+#
+# Michelin ghi địa chỉ tiếng Anh không dấu, và từ 2025 dùng đơn vị "Ward"
+# thay cho "District":
+#     "GF, Sofitel Legend Metropole, 15 Ngo Quyen Street, Hoan Kiem Ward"
+# Nên so khớp phải bỏ dấu cả hai phía, rồi trả về TÊN CÓ DẤU để hiển thị
+# đúng trên trang.
+# ─────────────────────────────────────────────────────────────────────────
+def district_from_address(address):
+    """Trả về tên quận có dấu, hoặc rỗng nếu không chắc. KHÔNG đoán bừa."""
+    plain = strip_accents(str(address or ""))
+    if not plain:
+        return ""
+
+    from config import HANOI_DISTRICTS   # nhập tại chỗ để tránh vòng lặp nhập
+
+    # Tên dài trước: "Bắc Từ Liêm" phải thắng "Từ Liêm" nếu cả hai cùng khớp
+    for name in sorted(HANOI_DISTRICTS, key=len, reverse=True):
+        if strip_accents(name) in plain:
+            return name
+    return ""
+
+
 def to_place(raw, source):
     """
     Bản ghi thô từ một script cào  →  đúng 21 khoá mà Apps Script chờ đợi.
@@ -142,7 +175,12 @@ def to_place(raw, source):
 
     category = raw.get("category") or ""
     if category not in CATEGORY_IDS:
-        category = guess_category(name, raw.get("mustTry"), raw.get("review"), address)
+        # KHÔNG đưa địa chỉ vào đây. Tên đường không nói gì về món ăn: "Phố Hàng
+        # Bún" không bán bún, "Le Van Mien Street" không bán miến. Trước đây
+        # dòng này có `address`, nhưng Michelin để trống nên chưa ai thấy hại;
+        # tới lúc lấy được địa chỉ thật thì 59/147 quán bị xếp danh mục theo
+        # tên đường — sai mà trông rất hợp lý, thứ tệ hơn cả để trống.
+        category = guess_category(name, raw.get("mustTry"), raw.get("review"))
 
     tags = raw.get("tags") or []
     if isinstance(tags, str):

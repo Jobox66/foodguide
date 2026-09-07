@@ -111,10 +111,15 @@ AWS WAF với thử thách JavaScript. `requests` + BeautifulSoup nhận đúng 
 **`michelin.py` đã chạy thật** trên guide.michelin.com, kết quả một lượt 2 trang mỗi thành phố:
 
 ```
-147 quán  ·  87 Selected  ·  48 Bib Gourmand  ·  11 một sao  ·  1 hai sao
-59 low / 49 mid / 35 high   ·   0 id trùng
+143 quán  ·  86 Selected  ·  47 Bib Gourmand  ·  10 một sao  ·  0 hai sao
+59 low / 49 mid / 35 high      ·  0 id trùng  ·  0 quán ngoài Việt Nam
+142/143 có địa chỉ             ·  Hà Nội 64 quán, 51 suy được quận
 rating bịa = 0  |  verified bịa = 0  |  ảnh hotlink = 0
 ```
+
+> Bộ số cũ ghi "147 quán, 11 một sao, 1 hai sao" là **sai**: nó tính cả 4 quán
+> Chengdu lọt vào danh sách Việt Nam, và quán "2 sao" duy nhất chính là một
+> trong số đó. Việt Nam không có quán 2 sao nào trong dữ liệu này.
 
 Hai điều học được khi chạy thật, ghi lại kẻo quên:
 
@@ -124,9 +129,54 @@ Hai điều học được khi chạy thật, ghi lại kẻo quên:
 
 Michelin đổi giao diện thì chạy `python crawler/run.py michelin --show` để xem cửa sổ trình duyệt và chỉnh lại selector trong `read_cards()`.
 
-## Trang danh sách không có địa chỉ
+## Địa chỉ: phải vào trang chi tiết
 
-Chỉ có tên thành phố ("Hanoi, Vietnam"), nên `district` và `address` luôn rỗng — cả 147 quán đều vậy. Điền nốt bằng cách dán link Google Maps vào ô tương ứng rồi bấm Quét trong trang, hoặc tự gõ khi duyệt.
+Trang *danh sách* chỉ có "Hanoi, Vietnam". Địa chỉ đường phố nằm ở *trang chi tiết* từng quán, trong một khối JSON-LD Michelin nhúng sẵn:
+
+```json
+"address": { "@type": "PostalAddress",
+  "streetAddress": "GF, Sofitel Legend Metropole, 15 Ngo Quyen Street, Hoan Kiem Ward",
+  "addressLocality": "Hanoi" }
+```
+
+Đọc JSON-LD chứ **không** bóc theo class CSS: đây là dữ liệu có cấu trúc họ chủ động công bố, không đổi theo lần thay giao diện. `.data-sheet__block--text` chỉ là đường lui.
+
+**Nhưng `crawl()` mặc định KHÔNG làm việc này.** Địa chỉ chỉ dùng để xếp quán vào đúng bộ lọc quận, mà bộ lọc chỉ có nghĩa với quán đã nằm trong cẩm nang. Mở 141 trang chi tiết ngay lúc cào là tải địa chỉ của hàng trăm quán sẽ không bao giờ được duyệt — 9 phút và một đống lượt tải vô ích lên máy chủ người ta.
+
+Nên lượt cào chỉ lưu **bảng link** `id → trang chi tiết` (`out/michelin_links.json`), và `run.py addresses` lấy địa chỉ sau, chỉ cho quán đã ở trong cẩm nang mà còn thiếu ô địa chỉ:
+
+```
+michelin   →  Crawl_Inbox  →  bạn tick Duyệt  →  FoodGuide  →  addresses
+  27 giây      141 quán        chọn 10 quán       10 quán      10 lượt tải
+```
+
+`addresses` đọc cả dòng về, chỉ sửa `address` và `district` rồi đẩy lại — Sheet ghi đè cả dòng nên không làm vậy là mất những gì bạn sửa tay. Quận đã điền sẵn thì không đụng. Chạy lại nhiều lần vô hại: nó bỏ qua quán đã có địa chỉ.
+
+`--details` giữ lại lối cũ (lấy ngay lúc cào), `--limit N` để thử trước, `--tab Crawl_Inbox` để làm ở phòng chờ.
+
+**Đợi trang render rồi mới đọc.** `domcontentloaded` xong không có nghĩa JSON-LD đã có: đọc ngay thì thỉnh thoảng ra rỗng, mà rỗng ở đây trông hệt như "trang này không có địa chỉ" — lỗi đua tiến trình đội lốt dữ liệu thiếu. Đã gặp thật: Le Beaulieu lúc được lúc không cho tới khi thêm `wait_for_selector(ADDRESS_READY_SELECTOR)`.
+
+**ID phải chốt trước khi biết quận.** `make_place_id()` bình thường trộn quận vào id để phân biệt hai quán trùng tên. Nhưng quận ở đây được điền *thêm* ở giai đoạn sau — cùng một quán, cào có địa chỉ và cào không có sẽ ra hai id khác nhau, và lần đẩy sau tạo ra một bộ dòng trùng thay vì cập nhật bộ cũ. Nên `to_michelin_place()` chốt id theo tên ngay từ đầu.
+
+## Hai bẫy dữ liệu chỉ lộ ra khi có địa chỉ
+
+**Tên đường không nói gì về món ăn.** `to_place()` từng đưa `address` vào `guess_category()`. Michelin để trống địa chỉ nên chưa ai thấy hại; tới lúc lấy được địa chỉ thật thì 59/147 quán bị xếp danh mục theo tên đường. Từ khoá khớp kiểu chuỗi con, không ranh giới từ:
+
+| Từ khoá | Khớp nhầm vào |
+|---|---|
+| `"y "` (Ý) | Ho Chi Minh Cit**y**, Nam K**y** Khoi Nghia, "X **by** Y", Eater**y**, Thu**y** |
+| `"che"` (chè) | **Che**ngdu |
+| `"mien"` (miến) | Le Van **Mien** Street |
+
+Sửa hai lớp: bỏ `address` khỏi phép đoán, và khớp theo ranh giới từ. Riêng `"y "` từng gán nhầm 10 quán chỉ vì chữ "by" trong tên.
+
+**Danh sách Việt Nam có lẫn quán nước ngoài.** 4 quán ở Chengdu lọt vào kết quả cào từ `/en/vn/...`, trong đó có quán 2 sao duy nhất của cả mẻ — suýt báo cáo "Việt Nam có một quán 2 sao" trong khi nó ở Tứ Xuyên. `in_target_country()` lọc theo ô địa điểm của thẻ ("Hanoi, Vietnam" / "Chengdu, Chinese Mainland"), và **in tên** những quán bị loại chứ không loại âm thầm. Ô địa điểm rỗng thì giữ lại — selector hỏng mà im lặng vứt sạch dữ liệu còn tệ hơn.
+
+## Quận: chỉ suy khi chắc
+
+Từ 2025 Hà Nội bỏ quận, chuyển sang phường. Tên phường trùng quận cũ (`Hoan Kiem Ward`, `Ba Dinh Ward`) thì `district_from_address()` nhận ra; phường mới như `Cua Nam`, `O Cho Dua`, `Quoc Tu Giam` thì để **rỗng**. Cửa Nam nay gộp từ nhiều quận cũ, `Tu Liem` không rõ Nam hay Bắc — đoán sai là đẩy quán vào nhầm bộ lọc, đúng thứ quy tắc 1 cấm.
+
+Quán TP.HCM đương nhiên không khớp quận Hà Nội. Bỏ `ho-chi-minh` khỏi `MICHELIN_START_URLS` nếu cẩm nang chỉ làm Hà Nội.
 
 ## Threads
 

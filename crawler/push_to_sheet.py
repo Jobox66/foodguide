@@ -92,7 +92,9 @@ def probe_script(tab):
     Dấu vân tay phiên bản: bản mới trả thêm inbox:true và inboxRows, bản cũ
     không có. Trả về (ổn chưa, lý do, phản hồi đầy đủ).
     """
-    result = _post({"action": "health", "sheet": tab}, timeout=40)
+    # Thử lại: Sheet chậm nhất thời làm dừng cả lệnh thì phiền, mà đây chỉ là
+    # câu hỏi thăm dò, gửi lại không gây tác dụng phụ nào.
+    result = _post_retry({"action": "health", "sheet": tab}, timeout=40)
 
     if not result.get("ok"):
         return False, f"không gọi được Apps Script: {result.get('error')}", result
@@ -117,6 +119,17 @@ def check():
             return json.loads(response.read().decode("utf-8"))
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+def pull(sheet_tab=None):
+    """Đọc toàn bộ một tab về. Trả None nếu hỏng, để nơi gọi biết mà dừng."""
+    tab = sheet_tab or SHEET_TAB
+    result = _post_retry({"action": "pull", "sheet": tab})
+
+    if not result.get("ok"):
+        print(f"✗ Không đọc được tab {tab}: {result.get('error')}", file=sys.stderr)
+        return None
+    return [p for p in (result.get("places") or []) if p.get("id")]
 
 
 def push(places, sheet_tab=None):

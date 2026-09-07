@@ -25,6 +25,193 @@ Tài liệu này ghi lại toàn bộ chiến lược, kiến trúc và quy trì
 ---
 
 
+## 0. Hướng dẫn chạy
+
+Phần này mô tả **bản đang chạy được**, không phải kế hoạch. Chi tiết kỹ thuật nằm ở [`crawler/README.md`](crawler/README.md).
+
+### 0.1. Cài một lần
+
+```bash
+pip install -r crawler/requirements.txt
+python -m playwright install chromium     # Michelin có AWS WAF, phải có trình duyệt thật
+
+cp crawler/.env.example crawler/.env
+```
+
+Mở `crawler/.env` điền đúng một dòng bắt buộc:
+
+```
+FOODGUIDE_API=https://angihanoi.vercel.app
+```
+
+Thiếu `https://` hay dán nguyên `.../api/sheet` đều được — tool tự dọn.
+`GEMINI_API_KEY` chỉ cần khi dùng lệnh `parse` (Bước 3), để trống vẫn cào Michelin bình thường.
+
+**Kiểm tra Apps Script trước khi chạy lần đầu.** Bản cũ không hiểu tham số `sheet`,
+và nó **không báo lỗi** — nó ghi thẳng vào tab `FoodGuide` rồi trả về `ok:true`.
+Cách cập nhật: mở Google Sheet → *Tiện ích mở rộng* → *Apps Script* → dán đè toàn bộ
+[`tools/sheet-appscript.gs`](tools/sheet-appscript.gs) → *Triển khai* → *Quản lý bản triển khai*
+→ ✏️ sửa bản **đang dùng** → *Phiên bản: Mới* → *Triển khai*.
+
+> Chọn "Bản triển khai **mới**" là ra URL khác và trang web mất kết nối. Phải sửa bản đang dùng.
+
+### 0.2. Bốn bước chạy
+
+```bash
+# 1. Kiểm tra kết nối + phiên bản Apps Script. Không đụng dữ liệu, chạy lúc nào cũng an toàn.
+python crawler/run.py check
+
+# 2. Cào Michelin → lưu ra crawler/out/michelin.json. CHƯA đẩy đi đâu.
+python crawler/run.py michelin
+
+# 3. Mở file JSON xem, thấy ổn mới đẩy vào tab Crawl_Inbox.
+python crawler/run.py push crawler/out/michelin.json
+```
+
+**4.** Trong Google Sheet: tab `Crawl_Inbox` → tick cột **Duyệt** ở những quán ưng ý
+→ menu **🍜 FoodGuide → ✅ Duyệt các quán đã tick**. Chỉ những dòng được tick mới sang tab chính.
+
+```bash
+# 5. CHỈ SAU KHI đã duyệt: lấy địa chỉ cho những quán vừa vào cẩm nang
+python crawler/run.py addresses
+```
+
+Bước 2 và 3 tách rời có chủ đích: cào xong không tự đẩy, để bạn nhìn dữ liệu trước.
+Muốn gộp thì thêm `--push`.
+
+Bước 5 tách khỏi bước 2 cũng có chủ đích, xem 0.6b. Cào chỉ mất **~30 giây**;
+việc mở trang chi tiết lấy địa chỉ mới là phần lâu, và nó chỉ chạy cho số quán
+bạn thật sự chọn. Thử trước cho chắc: `python crawler/run.py addresses --limit 5`.
+
+### 0.3. Các cờ
+
+| Cờ | Tác dụng |
+|---|---|
+| `--api https://...` | Đổi máy chủ tạm thời, khỏi sửa `.env` |
+| `--show` | Hiện cửa sổ trình duyệt — dùng khi Michelin đổi giao diện và selector hỏng |
+| `--push` | Cào xong đẩy luôn, bỏ qua bước xem file |
+| `--details` | Lấy địa chỉ ngay trong lượt cào, thay vì để dành cho lệnh `addresses`. Chậm hơn nhiều |
+| `--limit 5` | Của lệnh `addresses`: chỉ làm 5 quán, để thử trước |
+| `--tab Crawl_Inbox` | Của lệnh `addresses`: làm ở phòng chờ thay vì tab chính |
+| `CRAWL_MAX_PAGES=2` | Biến môi trường, giới hạn số trang mỗi thành phố |
+| `CRAWL_DELAY=3.0` | Giây nghỉ giữa các trang. Đừng hạ xuống — cào chậm là cách rẻ nhất để không bị chặn |
+
+### 0.4. `check` nói gì
+
+Sẵn sàng:
+
+```
+Máy chủ : https://angihanoi.vercel.app/api/sheet
+Tab đích: Crawl_Inbox
+Apps Script: bản mới — hiểu tab Crawl_Inbox (147 dòng đang có trong đó)
+
+✓ Sẵn sàng. Chạy:  python crawler/run.py michelin
+```
+
+Dòng `Apps Script:` là dòng quan trọng nhất — nó đi trọn vòng tới Google, khác với khối
+JSON phía trên chỉ nói máy chủ Vercel đã có đủ biến môi trường chưa.
+
+Chưa cập nhật Apps Script — **lệnh `push` sẽ từ chối ghi, không phải cào lại**:
+
+```
+✗ Cào được, nhưng CHƯA đẩy lên Sheet được:
+  Apps Script trên Google đang là BẢN CŨ, chưa biết tab Crawl_Inbox.
+  Bản cũ không báo lỗi — nó ghi hết vào tab chính.
+```
+
+### 0.5. Chạy lại nhiều lần có sao không
+
+Không. `id` sinh từ tên quán và quận chứ không từ thời điểm cào, nên chạy lại 5 lần
+vẫn ra đúng 143 dòng — Apps Script ghi đè theo `id` thay vì thêm mới. Việc điền thêm
+địa chỉ cũng không làm đổi `id`, dù `id` bình thường có trộn quận — xem ghi chú
+trong `to_michelin_place()`.
+Cào lại sau vài tháng thì quán mới được thêm, quán cũ được cập nhật.
+
+### 0.6. Ba thứ máy không tự điền
+
+| | Vì sao |
+|---|---|
+| **Số sao & lượt đánh giá** | Michelin chấm Sao / Bib Gourmand / Selected, không phải thang 1–5. Quy đổi sang 4.6 là bịa. Hạng Michelin nằm ở cột Tags. |
+| **Ảnh** | Ảnh Michelin có bản quyền; link CDN mạng xã hội hết hạn sau vài ngày. Dùng nút 📷 trong trang để tải ảnh bạn chụp. |
+| **Quận** | Xem 0.6b — điền được phần lớn, nhưng không phải tất cả. |
+
+Nhãn **Đã xác minh** cũng luôn tắt: nó có nghĩa là *bạn* đã tự đối chiếu Google Maps.
+
+**Địa chỉ thì lấy được**, từ trang chi tiết của chính Michelin — xem mục tiếp theo.
+
+### 0.6b. Địa chỉ và quận lấy từ đâu
+
+Trang *danh sách* chỉ ghi "Hanoi, Vietnam", không có số nhà. Nhưng mỗi quán có
+một *trang chi tiết*, và Michelin nhúng sẵn trong đó một khối **JSON-LD**:
+
+```json
+"address": { "@type": "PostalAddress",
+  "streetAddress": "GF, Sofitel Legend Metropole, 15 Ngo Quyen Street, Hoan Kiem Ward",
+  "addressLocality": "Hanoi" }
+```
+
+Đọc JSON-LD chứ không bóc theo class CSS — đó là dữ liệu có cấu trúc họ chủ động
+công bố, không đổi mỗi lần thay giao diện. `robots.txt` không cấm đường
+`/restaurant/...`, chỉ cấm URL có tham số lọc.
+
+**Nhưng việc này để dành làm sau, không làm lúc cào.** Địa chỉ chỉ dùng để xếp
+quán vào đúng bộ lọc quận, mà bộ lọc chỉ có nghĩa với quán đã nằm trong cẩm nang.
+Cào 141 quán rồi mở luôn 141 trang chi tiết nghĩa là tải địa chỉ của hàng trăm
+quán bạn sẽ không bao giờ chọn — mất 9 phút và làm phiền máy chủ người ta vô ích.
+
+Nên lượt cào chỉ lưu lại **bảng link** (`crawler/out/michelin_links.json`), và
+`run.py addresses` mới đi lấy địa chỉ — chỉ cho quán đã ở trong cẩm nang mà còn
+thiếu ô địa chỉ. Nó đọc cả dòng về, sửa đúng hai ô `address`/`district` rồi đẩy
+lại, nên thứ bạn đã sửa tay không bị mất. Quận đã điền sẵn thì nó không đụng.
+
+Đo thực tế: cào 141 quán mất **27 giây**; `addresses` cho 5 quán mất chưa tới
+một phút. Chạy `addresses` nhiều lần cũng không sao — nó bỏ qua quán đã có địa chỉ.
+
+Quận thì suy ra từ địa chỉ, và **chỉ suy khi chắc chắn**. Từ 2025 Hà Nội bỏ quận,
+chuyển sang phường: tên nào trùng quận cũ (`Hoan Kiem Ward`, `Ba Dinh Ward`) thì
+nhận ra được, còn phường mới như `Cua Nam` thì để trống — Cửa Nam nay gộp từ
+nhiều quận cũ, đoán bừa là đẩy quán vào nhầm bộ lọc.
+
+Bảng quận dùng để so khớp nằm ở `HANOI_DISTRICTS` trong `crawler/config.py`.
+Bộ lọc trên trang thì đọc `DISTRICTS` trong `js/data.js` — hiện chỉ có 7 quận,
+nên quận ngoài 7 cái đó vẫn hiện ở "Tất cả" nhưng không lọc riêng được.
+
+Quán ở TP.HCM đương nhiên không có quận Hà Nội. Nếu cẩm nang chỉ làm Hà Nội,
+bỏ dòng `ho-chi-minh` trong `MICHELIN_START_URLS` là cào nhanh hơn hẳn.
+
+### 0.7. Gặp lỗi thì làm gì
+
+| Hiện tượng | Nguyên nhân & cách xử lý |
+|---|---|
+| `HTTP Error 504` giữa chừng | Vercel bỏ cuộc chờ sau 60 giây, **Apps Script vẫn đang ghi**. Lệnh tự thử lại và tự đếm lại số dòng ở cuối, cứ đọc dòng "Đếm lại trên Sheet". |
+| `... 120 mới, 27 cập nhật` | Lô bị 504 rồi gửi lại: ghi một lần, đếm hai lần. Cộng lại đủ số quán là không mất gì. |
+| Tab `Crawl_Inbox` trông trống dù đã đẩy | Bản Apps Script cũ rải sẵn 1000 ô tick, làm dữ liệu bị nối xuống dòng 1001. Cập nhật script rồi chạy menu **🍜 FoodGuide → 🧹 Dọn dòng trống**. |
+| `UnicodeEncodeError ... cp1252` | Console Windows. Đã ép UTF-8 trong `run.py`, nếu vẫn gặp thì đặt `PYTHONIOENCODING=utf-8`. |
+| Cào ra 0 quán | Michelin đổi giao diện. Chạy `python crawler/run.py michelin --show` để xem trình duyệt và chỉnh lại selector trong `read_cards()` của `crawler/michelin.py`. |
+| `Bỏ N quán ngoài Việt Nam` | Bình thường, không phải lỗi. Trang danh sách Việt Nam có lẫn quán nước khác (đã gặp 4 quán Chengdu). Tool loại chúng và **in tên ra** để bạn kiểm lại, chứ không loại âm thầm. |
+
+Nếu Michelin chặn thật (mở tay được mà tool không được) thì **dừng lại**. Không thêm plugin
+giấu dấu vết, không xoay proxy, không giải captcha — đó là họ từ chối.
+
+### 0.8. Cấu trúc thư mục thật
+
+Mục 4 bên dưới là bố cục *dự kiến*. Khi làm thật thì gộp phẳng lại cho dễ đọc:
+
+```
+crawler/
+├── run.py            # CLI: check / michelin / parse / push
+├── config.py         # đọc .env, chuẩn hoá địa chỉ máy chủ
+├── schema.py         # nguồn sự thật của dữ liệu — 3 quy tắc ở mục 0.6
+├── michelin.py       # Bước 1, Playwright
+├── ai_parser.py      # Bước 3, Gemini structured output
+├── push_to_sheet.py  # Bước 4, đẩy qua /api/sheet + dò phiên bản Apps Script
+└── out/              # kết quả cào, không commit
+```
+
+Bước 2 (Threads) chưa làm, xem lý do ở cuối [`crawler/README.md`](crawler/README.md).
+
+---
+
 ## 1. Tổng quan kiến trúc hệ thống
 
 ```mermaid
@@ -134,7 +321,7 @@ Bài viết trên Threads là văn bản tự do, lộn xộn. Cần đưa qua A
 
 ## 3. Bảng ánh xạ cấu trúc dữ liệu (Data Schema)
 
-Để tương thích 100% với hệ thống [tools/sheet-appscript.gs](file:///d:/1.tangocduc/Code/foodguide/tools/sheet-appscript.gs) hiện tại, mỗi quán crawl được cần chuẩn hóa theo các cột sau:
+Để tương thích 100% với hệ thống [tools/sheet-appscript.gs](tools/sheet-appscript.gs) hiện tại, mỗi quán crawl được cần chuẩn hóa theo các cột sau:
 
 | Tên cột trong Sheet        | Key JSON        | Kiểu dữ liệu | Ý nghĩa & Ví dụ                                                            |
 | :--------------------------- | :-------------- | :-------------- | :----------------------------------------------------------------------------- |

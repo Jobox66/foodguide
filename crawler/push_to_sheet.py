@@ -143,7 +143,7 @@ def push(places, sheet_tab=None):
     if not health.get("ok") or not health.get("configured"):
         print(f"✗ Máy chủ chưa sẵn sàng: {health.get('error') or health.get('reason')}", file=sys.stderr)
         print(f"  Đang gọi: {config.API_BASE}/api/sheet", file=sys.stderr)
-        print("  Đặt FOODGUIDE_API trong crawler/.env cho đúng địa chỉ trang đã deploy.", file=sys.stderr)
+        print("  Đặt FOODGUIDE_API trong file .env cho đúng địa chỉ trang đã deploy.", file=sys.stderr)
         return 0, 0
 
     # Chốt chặn: Apps Script trên Google có đúng bản hiểu tab này không

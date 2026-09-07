@@ -10,10 +10,13 @@
 node_modules/
 npm-debug.log*
 
-# Tool crawl
-crawler/.env
-crawler/out/
-crawler/__pycache__/
+# Python venv
+.venv/
+venv/
 crawler/.venv/
+# Tool crawl
+crawler/out/
 crawler/output/
+crawler/.browser_data/
+crawler/session.json
 **/__pycache__/

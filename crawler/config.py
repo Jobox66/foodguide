@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Cấu hình cho tool crawl. Đọc từ biến môi trường, KHÔNG ghi giá trị thật vào file này.
+Cấu hình cho tool crawl. Đọc từ biến môi trường hoặc file .env ở thư mục gốc của project.
+KHÔNG ghi giá trị thật vào file này.
 
-Cách dùng: chép crawler/.env.example thành crawler/.env rồi điền.
 File .env đã nằm trong .gitignore.
 """
 
@@ -14,16 +14,31 @@ OUT_DIR = CRAWLER_DIR / "out"
 
 
 def _load_dotenv():
-    """Đọc crawler/.env mà không cần cài thêm thư viện"""
-    env_file = CRAWLER_DIR / ".env"
-    if not env_file.exists():
-        return
-    for line in env_file.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+    """Đọc file .env ở thư mục gốc project (hoặc crawler/.env nếu có) mà không cần cài thêm thư viện"""
+    candidates = [
+        CRAWLER_DIR.parent / ".env",
+        Path.cwd() / ".env",
+        CRAWLER_DIR / ".env",
+    ]
+    seen_files = set()
+    for env_file in candidates:
+        try:
+            resolved = env_file.resolve()
+        except Exception:
+            resolved = env_file
+        if resolved in seen_files or not env_file.is_file():
             continue
-        key, _, value = line.partition("=")
-        os.environ.setdefault(key.strip(), value.strip())
+        seen_files.add(resolved)
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip()
+            if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+                value = value[1:-1]
+            os.environ.setdefault(key, value)
 
 
 _load_dotenv()
@@ -67,12 +82,19 @@ API_BASE = _api_base()
 SHEET_TAB = os.environ.get("FOODGUIDE_SHEET_TAB", "Crawl_Inbox")
 
 # ─────────────────────────────────────────────────────────────────────────
-# Threads — main.py đang import các biến này. Bước 4 chưa làm, nhưng để
-# thiếu thì cả main.py không import nổi.
+# Threads Crawler (Bước 2 — Khám phá xu hướng & quán ruột)
 # ─────────────────────────────────────────────────────────────────────────
+DEFAULT_THREADS_QUERIES = [
+    "quán ruột hà nội",
+    "quán ngon hà nội",
+    "quán ăn ngon hà nội",
+    "must try hà nội",
+    "cà phê hà nội đẹp",
+]
+
 THREADS_SEARCH_QUERIES = [
     q.strip() for q in os.environ.get("THREADS_SEARCH_QUERIES", "").split(",") if q.strip()
-]
+] or DEFAULT_THREADS_QUERIES
 THREADS_MAX_POSTS = int(os.environ.get("THREADS_MAX_POSTS", "20"))
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -80,7 +102,7 @@ THREADS_MAX_POSTS = int(os.environ.get("THREADS_MAX_POSTS", "20"))
 # Lấy khoá miễn phí ở https://aistudio.google.com/apikey
 # ─────────────────────────────────────────────────────────────────────────
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 
 # ─────────────────────────────────────────────────────────────────────────
 # Lịch sự khi cào

@@ -23,6 +23,7 @@ Không đặt số sao, không bật verified, không lấy ảnh — xem schema
 
 import json
 import sys
+import time
 
 from config import GEMINI_API_KEY, GEMINI_MODEL
 from schema import CATEGORY_IDS, to_place
@@ -59,11 +60,11 @@ RESPONSE_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "name": {"type": "string"},
-                    "category": {"type": "string", "enum": CATEGORY_IDS + [""]},
+                    "category": {"type": "string"},
                     "district": {"type": "string"},
                     "address": {"type": "string"},
                     "priceRange": {"type": "string"},
-                    "priceLevel": {"type": "string", "enum": ["low", "mid", "high", ""]},
+                    "priceLevel": {"type": "string"},
                     "mustTry": {"type": "string"},
                     "review": {"type": "string"},
                     "tags": {"type": "array", "items": {"type": "string"}},
@@ -83,7 +84,7 @@ def parse_post(text, source="threads"):
     """
     if not GEMINI_API_KEY:
         print("Chưa có GEMINI_API_KEY. Lấy khoá miễn phí ở "
-              "https://aistudio.google.com/apikey rồi điền vào crawler/.env",
+              "https://aistudio.google.com/apikey rồi điền vào file .env",
               file=sys.stderr)
         return []
 
@@ -103,19 +104,28 @@ def parse_post(text, source="threads"):
         post=text.strip()[:8000],
     )
 
-    try:
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=RESPONSE_SCHEMA,
-                temperature=0,   # trích xuất, không sáng tác
-            ),
-        )
-        data = json.loads(response.text)
-    except Exception as e:
-        print(f"  ✗ Gemini lỗi: {e}", file=sys.stderr)
+    data = None
+    for attempt in range(1, 4):
+        try:
+            response = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=RESPONSE_SCHEMA,
+                    temperature=0,   # trích xuất, không sáng tác
+                ),
+            )
+            data = json.loads(response.text)
+            break
+        except Exception as e:
+            if ("503" in str(e) or "UNAVAILABLE" in str(e)) and attempt < 3:
+                time.sleep(2 * attempt)
+                continue
+            print(f"  ✗ Gemini lỗi: {e}", file=sys.stderr)
+            return []
+
+    if not data:
         return []
 
     results = []

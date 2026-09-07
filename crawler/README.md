@@ -14,7 +14,7 @@ Bài viết ─┘        (chuẩn hoá)          (không cần service account)
 pip install -r crawler/requirements.txt
 python -m playwright install chromium
 
-cp crawler/.env.example crawler/.env    # rồi điền FOODGUIDE_API và GEMINI_API_KEY
+cp .env.example .env    # cấu hình tại file .env ở thư mục gốc (điền FOODGUIDE_API, GEMINI_API_KEY...)
 ```
 
 ## Dùng
@@ -178,8 +178,23 @@ Từ 2025 Hà Nội bỏ quận, chuyển sang phường. Tên phường trùng 
 
 Quán TP.HCM đương nhiên không khớp quận Hà Nội. Bỏ `ho-chi-minh` khỏi `MICHELIN_START_URLS` nếu cẩm nang chỉ làm Hà Nội.
 
-## Threads
+## Threads Crawler (Bước 2 — Khám phá xu hướng & quán ruột)
 
-Chưa làm, và đang nằm ở cuối hàng đợi có chủ đích. Điều khoản của Meta cấm thu thập tự động; đây cũng là chặng cho dữ liệu bẩn nhất (văn bản tự do, phải qua AI mới dùng được) trong khi rủi ro cao nhất. Làm ba phần trên chạy ổn đã.
+Cào các bài chia sẻ review trên mạng xã hội Threads theo từ khoá hoặc link bài viết trực tiếp, sau đó kết hợp với **Gemini 2.0 Flash** để bóc tách dữ liệu quán ăn:
 
-Hướng rẻ hơn nhiều cho cùng mục đích: lưu quán vào một **danh sách trên Google Maps** khi đi đường, rồi dùng Google Takeout xuất CSV (Title + URL). Không WAF, không chống bot, không vướng điều khoản — vì đó là dữ liệu của chính bạn, do Google cung cấp công cụ xuất. Mỗi URL đưa qua `/api/place` là ra tên, địa chỉ, quận, toạ độ.
+```bash
+# 1. Đăng nhập 1 lần duy nhất để lưu phiên làm việc (vượt qua rào cản tìm kiếm của Threads)
+python crawler/run.py threads --login
+
+# 2. Cào bài viết theo từ khoá tìm kiếm (lưu bài thô vào crawler/out/threads_posts.json)
+python crawler/run.py threads --query "quán ruột hà nội" --limit 15
+
+# 3. Cào và tự động trích xuất quán ăn bằng Gemini AI (lưu vào crawler/out/threads.json)
+python crawler/run.py threads --query "quán ruột hà nội" --parse
+
+# 4. Cào một bài viết Threads cụ thể
+python crawler/run.py threads --url https://www.threads.com/@user/post/xyz --parse
+
+# 5. Pipeline hoàn chỉnh: Cào -> Gemini AI bóc tách -> Đẩy vào Crawl_Inbox
+python crawler/run.py threads --query "quán ngon phố cổ" --parse --push
+```

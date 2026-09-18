@@ -176,7 +176,13 @@ def main():
         import config
         result = pusher.check()
         print(f"Máy chủ : {config.API_BASE}/api/sheet")
-        print(f"Tab đích: {config.SHEET_TAB}\n")
+        print(f"Tab đích: {config.SHEET_TAB}")
+
+        # In model ĐANG DÙNG chứ không phải model bạn tưởng mình đã đặt. Đặt
+        # GEMINI_MODEL nhầm vào .env.example (file mẫu, không ai đọc) là lỗi câm:
+        # chương trình vẫn chạy, chỉ là chạy model khác và tiêu quota của nó.
+        print(f"Gemini  : {config.GEMINI_MODEL}"
+              f"{'' if config.GEMINI_API_KEY else '  (CHƯA có GEMINI_API_KEY)'}\n")
         print(json.dumps(result, ensure_ascii=False, indent=2))
 
         if result.get("ok") and result.get("configured"):

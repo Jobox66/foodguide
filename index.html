@@ -104,8 +104,16 @@
         <button id="searchClearBtn" class="search-clear-btn" title="Xóa tìm kiếm">✕</button>
       </div>
 
-      <!-- District Horizontal Scroll Track -->
+      <!-- City Horizontal Scroll Track -->
       <div class="filter-scroll-wrapper">
+        <div class="filter-scroll-title">🗺️ Thành phố:</div>
+        <div id="cityPills" class="filter-scroll-track">
+          <!-- Render tự động từ app.js -->
+        </div>
+      </div>
+
+      <!-- District Horizontal Scroll Track — chỉ hiện khi đã chọn một thành phố -->
+      <div class="filter-scroll-wrapper" id="districtFilterRow" style="margin-top: 8px;">
         <div class="filter-scroll-title">📍 Quận:</div>
         <div id="districtPills" class="filter-scroll-track">
           <!-- Render tự động từ app.js -->

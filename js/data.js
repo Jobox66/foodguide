@@ -1221,16 +1221,46 @@ const INITIAL_PLACES = [
   }
 ];
 
-const DISTRICTS = [
-  "Tất cả quận",
-  "Hoàn Kiếm",
-  "Ba Đình",
-  "Hai Bà Trưng",
-  "Đống Đa",
-  "Cầu Giấy",
-  "Tây Hồ",
-  "Thanh Xuân"
+/**
+ * Bộ lọc hai tầng: thành phố → quận.
+ *
+ * Quán không mang sẵn trường "thành phố" — chỉ có quận và địa chỉ. Nên thành
+ * phố được suy ra: quận nào thuộc danh sách của thành phố nào, hoặc bí quá thì
+ * dò từ khoá trong địa chỉ (aliases). Danh sách quận của hai thành phố không
+ * trùng tên nhau nên cách suy này không nhập nhằng.
+ */
+const CITIES = [
+  {
+    id: "ha-noi",
+    name: "Hà Nội",
+    icon: "🏛️",
+    aliases: ["ha noi", "hanoi"],
+    districts: [
+      "Hoàn Kiếm", "Ba Đình", "Hai Bà Trưng", "Đống Đa",
+      "Cầu Giấy", "Tây Hồ", "Thanh Xuân"
+    ]
+  },
+  {
+    id: "tphcm",
+    name: "TP.HCM",
+    icon: "🌆",
+    aliases: ["ho chi minh", "tphcm", "tp hcm", "sai gon", "saigon"],
+    districts: [
+      "Quận 1", "Quận 3", "Quận 4", "Quận 5", "Quận 6", "Quận 7",
+      "Quận 8", "Quận 10", "Quận 11", "Quận 12",
+      "Bình Thạnh", "Phú Nhuận", "Tân Bình", "Tân Phú",
+      "Gò Vấp", "Bình Tân", "Thủ Đức", "Hóc Môn"
+    ]
+  }
 ];
+
+const ALL_CITIES = "Tất cả";
+
+// Danh sách phẳng, giữ nguyên tên cũ để mọi chỗ dùng DISTRICTS (ô chọn quận khi
+// thêm/sửa quán, dò quận từ địa chỉ OpenStreetMap) không phải đổi.
+const DISTRICTS = ["Tất cả quận"].concat(
+  CITIES.reduce((acc, c) => acc.concat(c.districts), [])
+);
 
 // Profile tác giả / Curator
 const DEFAULT_PROFILE = {

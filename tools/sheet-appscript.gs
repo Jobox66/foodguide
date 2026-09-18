@@ -424,16 +424,48 @@ function deleteMany_(ids, sheetName) {
   var sheet = getSheet_(sheetName);
   var index = buildRowIndex_(sheet);
 
+  // Tập id được phép xoá, tra nhanh
+  var duocPhep = {};
+  ids.forEach(function (id) {
+    var key = String(id || '').trim();
+    if (key) duocPhep[key] = true;
+  });
+
   var rowNumbers = ids
     .map(function (id) { return index[String(id || '').trim()]; })
     .filter(function (rowNumber) { return rowNumber; })
     .sort(function (a, b) { return b - a; });
 
+  // ĐỌC LẠI ID NGAY TRƯỚC KHI XOÁ, không tin vào số dòng đã tra lúc đầu.
+  //
+  // Số dòng là thứ hết hạn: chỉ cần lệnh xoá chạy hai lần chồng nhau (Google
+  // gửi lại sau khi đường dẫn kết quả trả 404 chẳng hạn), lần sau cầm chỉ mục
+  // cũ trong khi các dòng đã dồn lên — số dòng đó giờ trỏ sang quán khác.
+  // Chuyện này đã xảy ra thật: xin xoá 8 quán, mất 28 dòng.
+  //
+  // Đối chiếu id một lần nữa làm cả lớp lỗi đó biến mất: dòng nào không nằm
+  // trong danh sách xin xoá thì không bao giờ bị đụng tới, dù chỉ mục sai cỡ
+  // nào. Cũng nhờ vậy mà gửi lại lệnh xoá trở nên an toàn.
+  var deleted = 0;
+  var mismatched = 0;
   rowNumbers.forEach(function (rowNumber) {
-    sheet.deleteRow(rowNumber);
+    var hienTai = String(sheet.getRange(rowNumber, ID_COLUMN).getValue() || '').trim();
+    if (duocPhep[hienTai] === true) {
+      sheet.deleteRow(rowNumber);
+      deleted++;
+    } else {
+      mismatched++;
+    }
   });
 
-  return { ok: true, deleted: rowNumbers.length, total: countPlaces_(sheetName) };
+  var result = { ok: true, deleted: deleted, total: countPlaces_(sheetName) };
+  if (mismatched > 0) {
+    // Không im lặng: lệch chỉ mục nghĩa là có thứ khác vừa sửa Sheet
+    result.skipped = mismatched;
+    result.note = 'Bỏ qua ' + mismatched + ' dòng vì id không khớp — Sheet đã đổi ' +
+                  'kể từ lúc tra chỉ mục. Chạy lại lệnh xoá nếu vẫn còn quán cần bỏ.';
+  }
+  return result;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

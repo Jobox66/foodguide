@@ -10,6 +10,7 @@ const state = {
   settings: {},
   currentCategory: "all",
   searchQuery: "",
+  selectedCity: "Tất cả",
   selectedDistrict: "Tất cả quận",
   selectedPriceLevel: "all",
   selectedVerification: "all",
@@ -271,6 +272,8 @@ function cacheDOMElements() {
 
   elements.searchInput = document.getElementById("searchInput");
   elements.searchClearBtn = document.getElementById("searchClearBtn");
+  elements.cityPills = document.getElementById("cityPills");
+  elements.districtFilterRow = document.getElementById("districtFilterRow");
   elements.districtPills = document.getElementById("districtPills");
   elements.priceChips = document.querySelectorAll(".price-chip");
   elements.sortChips = document.querySelectorAll(".sort-chip");
@@ -602,6 +605,7 @@ function setupEventListeners() {
  */
 function resetFilters() {
   state.searchQuery = "";
+  state.selectedCity = ALL_CITIES;
   state.selectedDistrict = "Tất cả quận";
   state.selectedPriceLevel = "all";
   state.selectedVerification = "all";
@@ -610,6 +614,9 @@ function resetFilters() {
 
   if (elements.searchInput) elements.searchInput.value = "";
   if (elements.searchClearBtn) elements.searchClearBtn.classList.remove("visible");
+
+  renderCityPills();
+  renderDistrictsPills();
 
   // Reset active classes on District Chips
   if (elements.districtPills) {
@@ -643,6 +650,7 @@ function resetFilters() {
  */
 function renderAll() {
   renderProfile();
+  renderCityPills();
   renderDistrictsPills();
   renderCategoryPills();
   renderViewMode();
@@ -679,12 +687,111 @@ function renderProfile() {
 }
 
 /**
- * Render thanh cuộn ngang danh sách quận (District Chips)
+ * Danh sách <option> quận, gom theo thành phố.
+ *
+ * Đổ phẳng 25 quận của hai thành phố vào một ô chọn thì người nhập phải dò mắt
+ * giữa "Tây Hồ" và "Tân Phú". <optgroup> giải quyết bằng đúng một thẻ.
+ */
+function districtOptionsHtml(selected) {
+  let html = "";
+  CITIES.forEach(city => {
+    html += `<optgroup label="${escapeHtml(city.name)}">`;
+    city.districts.forEach(d => {
+      const sel = d === selected ? " selected" : "";
+      html += `<option value="${escapeHtml(d)}"${sel}>${escapeHtml(d)}</option>`;
+    });
+    html += `</optgroup>`;
+  });
+  return html;
+}
+
+/**
+ * Quán này thuộc thành phố nào?
+ *
+ * Bản ghi không có trường thành phố — chỉ có quận và địa chỉ. Suy theo hai bậc:
+ * quận trước (chắc chắn, vì tên quận hai thành phố không trùng nhau), rồi mới
+ * tới từ khoá trong địa chỉ. Không suy ra được thì trả rỗng, và quán đó chỉ
+ * hiện khi đang xem "Tất cả" — thà không hiện còn hơn hiện nhầm thành phố.
+ */
+function cityOfPlace(place) {
+  const district = String((place && place.district) || "").trim();
+  if (district) {
+    const byDistrict = CITIES.find(c => c.districts.indexOf(district) !== -1);
+    if (byDistrict) return byDistrict.id;
+  }
+
+  const haystack = normalizeVi(String((place && place.address) || ""));
+  if (haystack.trim()) {
+    const byAddress = CITIES.find(c => c.aliases.some(a => haystack.includes(a)));
+    if (byAddress) return byAddress.id;
+  }
+  return "";
+}
+
+/** Thành phố đang chọn, hoặc null nếu đang xem tất cả */
+function currentCity() {
+  return CITIES.find(c => c.id === state.selectedCity) || null;
+}
+
+/**
+ * Render hàng chip thành phố (tầng 1 của bộ lọc)
+ */
+function renderCityPills() {
+  if (!elements.cityPills) return;
+
+  const dem = {};
+  state.places.forEach(p => {
+    const id = cityOfPlace(p);
+    if (id) dem[id] = (dem[id] || 0) + 1;
+  });
+
+  let html = `
+    <button class="filter-chip city-chip ${state.selectedCity === ALL_CITIES ? "active" : ""}"
+            data-city="${escapeHtml(ALL_CITIES)}">🗺️ ${escapeHtml(ALL_CITIES)}</button>
+  `;
+  CITIES.forEach(c => {
+    const isActive = state.selectedCity === c.id ? "active" : "";
+    html += `
+      <button class="filter-chip city-chip ${isActive}" data-city="${escapeHtml(c.id)}">
+        ${c.icon} ${escapeHtml(c.name)} (${dem[c.id] || 0})
+      </button>
+    `;
+  });
+  elements.cityPills.innerHTML = html;
+
+  elements.cityPills.querySelectorAll(".city-chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      state.selectedCity = chip.dataset.city;
+      // Đổi thành phố thì quận cũ vô nghĩa — bỏ chọn thay vì giữ một quận
+      // thuộc thành phố khác rồi lọc ra danh sách rỗng.
+      state.selectedDistrict = "Tất cả quận";
+      renderCityPills();
+      renderDistrictsPills();
+      renderPlaces();
+    });
+  });
+}
+
+/**
+ * Render thanh cuộn ngang danh sách quận (tầng 2 — chỉ của thành phố đang chọn)
  */
 function renderDistrictsPills() {
   if (!elements.districtPills) return;
+
+  const city = currentCity();
+
+  // Chưa chọn thành phố thì hàng quận không có nghĩa gì: gộp quận của hai thành
+  // phố vào một hàng chỉ làm người xem phải cuộn qua 25 cái chip.
+  if (elements.districtFilterRow) {
+    elements.districtFilterRow.style.display = city ? "" : "none";
+  }
+  if (!city) {
+    elements.districtPills.innerHTML = "";
+    return;
+  }
+
   let html = "";
-  DISTRICTS.forEach(d => {
+  ["Tất cả quận"].concat(city.districts).forEach(d => {
     const isActive = state.selectedDistrict === d ? "active" : "";
     const icon = d === "Tất cả quận" ? "📍" : "🏙️";
     html += `
@@ -858,7 +965,13 @@ function getFilteredPlaces() {
       return false;
     }
 
-    // Lọc theo Quận
+    // Lọc theo Thành phố (tầng 1). Quán không suy ra được thành phố thì chỉ
+    // hiện khi đang xem "Tất cả" — thà thiếu còn hơn xếp nhầm thành phố.
+    if (state.selectedCity !== ALL_CITIES && cityOfPlace(place) !== state.selectedCity) {
+      return false;
+    }
+
+    // Lọc theo Quận (tầng 2)
     if (state.selectedDistrict !== "Tất cả quận" && place.district !== state.selectedDistrict) {
       return false;
     }
@@ -1113,11 +1226,8 @@ function openAddPlaceModal() {
   // Quận — cũng có lựa chọn trống thay vì mặc định "Hoàn Kiếm"
   const distSelect = document.getElementById("newPlaceDistrict");
   if (distSelect) {
-    let distHtml = `<option value="">— Chưa rõ quận —</option>`;
-    DISTRICTS.filter(d => d !== "Tất cả quận").forEach(d => {
-      distHtml += `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`;
-    });
-    distSelect.innerHTML = distHtml;
+    distSelect.innerHTML = `<option value="">— Chưa rõ quận —</option>`
+      + districtOptionsHtml("");
   }
 
   // Mức giá — bỏ mặc định "mid" để không khẳng định điều chưa biết
@@ -2775,11 +2885,8 @@ function openPlaceManagerModal() {
   if (!elements.placeManagerModal) return;
 
   if (elements.managerDistrictFilter) {
-    let distHtml = "";
-    DISTRICTS.forEach(d => {
-      distHtml += `<option value="${d}">${d}</option>`;
-    });
-    elements.managerDistrictFilter.innerHTML = distHtml;
+    elements.managerDistrictFilter.innerHTML =
+      `<option value="Tất cả quận">Tất cả quận</option>` + districtOptionsHtml("");
     elements.managerDistrictFilter.value = "Tất cả quận";
   }
 
@@ -2898,11 +3005,8 @@ function openEditPlaceModal(placeId) {
 
   const distSelect = document.getElementById("editPlaceDistrict");
   if (distSelect) {
-    let distHtml = "";
-    DISTRICTS.filter(d => d !== "Tất cả quận").forEach(d => {
-      distHtml += `<option value="${d}">${d}</option>`;
-    });
-    distSelect.innerHTML = `<option value="">— Chưa rõ quận —</option>` + distHtml;
+    distSelect.innerHTML = `<option value="">— Chưa rõ quận —</option>`
+      + districtOptionsHtml(place.district || "");
     distSelect.value = place.district || "";
   }
 

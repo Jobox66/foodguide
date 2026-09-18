@@ -246,33 +246,148 @@ def crawl_query(page, query, limit=20):
     return posts
 
 
-def crawl_url(page, url):
-    """Cào trực tiếp nội dung một bài viết cụ thể từ link Threads"""
-    print(f"\n→ Đang mở bài viết: {url}")
+IMAGE_DIR = CRAWLER_DIR / "out" / "threads_images"
+
+# Trần ảnh mỗi khối. Một shop quảng cáo có thể dán 15 ảnh sản phẩm trong một
+# bình luận; ảnh chụp danh sách quán thì thường chỉ 1–2 tấm. Không chặn trần là
+# đốt quota Gemini vào ảnh bánh ngọt.
+MAX_IMAGES_PER_BLOCK = 4
+
+
+def download_images(posts, max_per_block=MAX_IMAGES_PER_BLOCK):
+    """
+    Tải ảnh trong các khối về đĩa, ghi đường dẫn vào post["image_files"].
+
+    Trả về tổng số ảnh tải được. Ảnh hỏng thì bỏ qua, không làm hỏng cả mẻ.
+    """
+    import hashlib
+    import urllib.request
+
+    IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    total = 0
+
+    for post in posts:
+        files = []
+        for url in (post.get("images") or [])[:max_per_block]:
+            name = hashlib.sha1(url.encode()).hexdigest()[:16] + ".jpg"
+            path = IMAGE_DIR / name
+            if not path.exists():
+                try:
+                    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+                    with urllib.request.urlopen(req, timeout=30) as r:
+                        path.write_bytes(r.read())
+                except Exception as e:
+                    print(f"     ✗ ảnh hỏng: {str(e)[:60]}", file=sys.stderr)
+                    continue
+            files.append(str(path))
+            total += 1
+        post["image_files"] = files
+
+    return total
+
+
+def _clean_block(raw):
+    """Bỏ chữ giao diện và dòng chỉ có số đếm tương tác"""
+    lines = []
+    for line in (raw or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line in ("Follow", "Theo dõi", "Reply", "Trả lời", "Like", "Thích",
+                    "Repost", "Đăng lại", "Share", "Chia sẻ", "Translate", "Dịch",
+                    "More", "Xem thêm"):
+            continue
+        if re.fullmatch(r"[\d.,]+\s*[KMkm]?", line):          # 6,7K
+            continue
+        if re.fullmatch(r"\d+\s*(h|m|d|s|w|ngày|giờ|phút|tuần|giây)", line):
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def crawl_url(page, url, max_scrolls=15):
+    """
+    Đọc MỘT bài viết Threads — cả bài gốc LẪN phần trả lời.
+
+    Vì sao phải đọc phần trả lời: những bài đáng giá nhất trên Threads là câu
+    hỏi mồi — "Ở Sài Gòn có quán nào ngon kiểu ít người biết không mọi người?",
+    "cho tui xin tên những quán ăn khum thể bỏ lỡ". Bài gốc không có tên quán
+    nào; toàn bộ giá trị nằm ở hàng trăm câu trả lời bên dưới. Bản trước chỉ
+    lấy container đầu tiên nên cào 28 bài mà chỉ ra 8 quán.
+
+    Trả về danh sách bản ghi: bài gốc, rồi mỗi câu trả lời một bản ghi, có kèm
+    chủ đề để bộ bóc tách biết đang nói về thành phố nào.
+    """
+    print(f"\n→ Mở bài viết: {url}")
     try:
-        page.goto(url, wait_until="load", timeout=30000)
+        page.goto(url, wait_until="load", timeout=45000)
         time.sleep(3)
         page.keyboard.press("Escape")
     except Exception as e:
         print(f"  ✗ Lỗi tải trang: {e}", file=sys.stderr)
-        return None
+        return []
 
-    # Lấy text bài viết
+    # Cuộn để Threads nạp thêm trả lời. Dừng sớm khi không có gì mới.
+    seen_count = 0
+    for i in range(max_scrolls):
+        page.mouse.wheel(0, 4000)
+        time.sleep(random.uniform(1.2, 2.0))
+        now = page.locator("div[data-pressable-container='true']").count()
+        if now == seen_count:
+            break
+        seen_count = now
+
+    # Đọc chữ VÀ ảnh trong cùng một lượt. Rất nhiều câu trả lời hay nhất không
+    # gõ tên quán ra chữ mà chụp màn hình một danh sách — chính tác giả bài này
+    # cũng phải hỏi lại "sao không thấy địa chỉ hay tên quán để tìm á người ơi".
+    # Bỏ ảnh là bỏ đúng phần đáng giá nhất.
     try:
-        container = page.locator("article, div[data-pressable-container='true']").first
-        if container.count() > 0:
-            text = container.inner_text()
-        else:
-            text = page.locator("body").inner_text()
-        return {
-            "id": url,
-            "text": text.strip(),
+        raw_blocks = page.evaluate("""() => {
+            return [...document.querySelectorAll("div[data-pressable-container='true']")]
+                .map(el => ({
+                    text: el.innerText || '',
+                    images: [...el.querySelectorAll('img')]
+                        // Ảnh nội dung, không phải avatar: avatar Threads bé và vuông
+                        .filter(i => i.naturalWidth >= 200 && i.naturalHeight >= 200)
+                        .map(i => i.src)
+                        .filter(Boolean)
+                }));
+        }""")
+    except Exception as e:
+        print(f"  ✗ Không đọc được nội dung: {e}", file=sys.stderr)
+        return []
+
+    blocks, images_of = [], []
+    for item in raw_blocks:
+        text = _clean_block(item.get("text"))
+        imgs = item.get("images") or []
+        if text in blocks:
+            continue
+        if len(text) >= 25 or imgs:
+            blocks.append(text)
+            images_of.append(imgs)
+
+    if not blocks:
+        print("  ✗ Không thấy nội dung nào.")
+        return []
+
+    # Dòng đầu của bài gốc làm ngữ cảnh — nhờ đó câu trả lời cụt như "quán Dì Ba
+    # ngon lắm" vẫn biết đang nói về thành phố nào.
+    # Cắt ngắn: tiền tố dài hơn chính câu trả lời thì chỉ làm loãng phần đáng đọc
+    topic = re.sub(r"^\S+\s+\d{2}/\d{2}/\d{4}\s*", "", " ".join(blocks[0].split()))[:70]
+    so_anh = sum(len(x) for x in images_of)
+    print(f"  ✓ {len(blocks)} khối (1 bài gốc + {len(blocks) - 1} trả lời) · {so_anh} ảnh")
+
+    posts = []
+    for i, (text, imgs) in enumerate(zip(blocks, images_of)):
+        posts.append({
+            "id": f"{url}#{i}",
+            "text": text if i == 0 else f"[Chủ đề: {topic}]\n{text}",
+            "images": imgs,
             "url": url,
             "author": "",
-        }
-    except Exception as e:
-        print(f"  ✗ Không đọc được nội dung bài: {e}", file=sys.stderr)
-        return None
+        })
+    return posts
 
 
 def crawl(queries=None, limit=20, headless=True, target_url=None):
@@ -284,9 +399,9 @@ def crawl(queries=None, limit=20, headless=True, target_url=None):
         with sync_playwright() as p:
             context = _launch_context(p, headless=headless)
             page = context.new_page()
-            post = crawl_url(page, target_url)
+            posts = crawl_url(page, target_url)
             context.close()
-            return [post] if post else []
+            return posts
 
     search_queries = queries or config.THREADS_SEARCH_QUERIES
     if not search_queries:

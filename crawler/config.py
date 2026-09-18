@@ -102,6 +102,13 @@ THREADS_MAX_POSTS = int(os.environ.get("THREADS_MAX_POSTS", "20"))
 # Lấy khoá miễn phí ở https://aistudio.google.com/apikey
 # ─────────────────────────────────────────────────────────────────────────
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+# Mặc định PHẢI trùng .env.example, nếu không thì ai điền model vào file mẫu
+# (thay vì .env thật) cũng tưởng mình đã đổi, trong khi chương trình chạy model
+# khác — lỗi câm, chỉ lộ khi hết quota của model mình không hề chọn.
+#
+# gemini-2.0-flash đã bị Google gỡ: gọi vào là 404 "no longer available".
+# Đổi model KHÔNG giúp tiết kiệm quota — hạn mức free tier tính theo lượt gọi,
+# nên cách duy nhất là gộp nhiều bài vào một lượt (xem BATCH_SIZE ai_parser.py).
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 
 # ─────────────────────────────────────────────────────────────────────────

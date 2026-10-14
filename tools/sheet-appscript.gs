@@ -53,6 +53,26 @@
 /** Chuỗi bí mật — ĐỔI THÀNH CỦA BẠN, và điền y hệt vào SHEETS_TOKEN trên Vercel */
 var SHEET_TOKEN = 'doi-chuoi-nay-thanh-cua-ban';
 
+/**
+ * Phiên bản của CHÍNH FILE NÀY. Tăng lên mỗi khi sửa thứ gì phía máy chủ cần
+ * biết, rồi dán lại file lên Apps Script.
+ *
+ * Vì sao cần: Apps Script chạy trên Google là một bản sao rời, không có cách
+ * nào nhìn từ ngoài vào để biết nó đang là bản nào. Đã trả giá hai lần —
+ * bản cũ không hiểu tab Crawl_Inbox nên ghi 147 quán thẳng vào cẩm nang, và
+ * bản cũ xoá theo số dòng nên xin xoá 8 quán thì mất 28. Cả hai lần đều
+ * "chạy bình thường", chỉ sai âm thầm.
+ *
+ * Giờ `run.py check` đọc số này trong file trên máy rồi so với số Google trả
+ * về. Lệch là báo ngay, khỏi phải đoán.
+ *
+ *   4 — xoá đối chiếu id trước khi xoá từng dòng (không tin số dòng đã tra)
+ *   3 — đếm dòng theo cột ID, bỏ việc rải sẵn 1000 ô tick
+ *   2 — thêm tab Crawl_Inbox và tham số sheet
+ *   1 — bản đầu
+ */
+var SCRIPT_VERSION = 4;
+
 /** Tên tab chính thức — dữ liệu ở đây mới lên trang web. Script tự tạo nếu chưa có. */
 var SHEET_NAME = 'FoodGuide';
 
@@ -170,7 +190,8 @@ function doPost(e) {
 
   try {
     switch (body.action) {
-      case 'health':      return tag({ ok: true, sheet: sheetName, rows: countPlaces_(sheetName),
+      case 'health':      return tag({ ok: true, version: SCRIPT_VERSION, sheet: sheetName,
+                                        rows: countPlaces_(sheetName),
                                         inboxRows: countInboxRows_(), photos: true, inbox: true });
       case 'pull':        return tag({ ok: true, places: readAll_(sheetName) });
       case 'push':        return tag(upsertMany_(body.places || [], sheetName));

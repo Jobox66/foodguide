@@ -192,9 +192,16 @@ def main():
             # mà vẫn trả về ok:true.
             good, why, probe = pusher.probe_script(config.SHEET_TAB)
             if good:
-                print(f"Apps Script: bản mới — hiểu tab {config.SHEET_TAB}"
-                      f" ({probe.get('rows')} dòng đang có trong đó)")
-                print("\n✓ Sẵn sàng. Chạy:  python crawler/run.py michelin")
+                tren_may = pusher.script_version_on_disk()
+                print(f"Apps Script: bản {probe.get('version') or '≤3'}"
+                      f" / file trên máy bản {tren_may}"
+                      f" · tab {config.SHEET_TAB} có {probe.get('rows')} dòng")
+
+                canh_bao = pusher.version_warning(probe)
+                if canh_bao:
+                    print("\n" + canh_bao)
+                else:
+                    print("\n✓ Sẵn sàng. Chạy:  python crawler/run.py michelin")
             else:
                 print("\n✗ Cào được, nhưng CHƯA đẩy lên Sheet được:")
                 print("  " + why)

@@ -27,13 +27,14 @@ VÌ SAO PHẢI DÒ PHIÊN BẢN APPS SCRIPT TRƯỚC KHI GHI:
 """
 
 import json
+import re
 import sys
 import time
 import urllib.error
 import urllib.request
 
 import config
-from config import SHEET_TAB
+from config import SHEET_TAB, CRAWLER_DIR
 
 BATCH_SIZE = 60    # Lô 100 đủ lâu để Vercel bỏ cuộc chờ (504) trong khi Apps
                    # Script vẫn đang chạy — lúc đó không biết lô đó đã ghi chưa.
@@ -85,6 +86,22 @@ HUONG_DAN_CAP_NHAT = "\n".join([
 ])
 
 
+def script_version_on_disk():
+    """
+    Số phiên bản ghi trong tools/sheet-appscript.gs trên máy.
+
+    So nó với số Google trả về là cách duy nhất biết bản đang chạy có phải bản
+    mới nhất không — Apps Script là một bản sao rời, nhìn từ ngoài không đoán
+    được. Thiếu đối chiếu này đã hai lần gây hỏng dữ liệu âm thầm.
+    """
+    gs = CRAWLER_DIR.parent / "tools" / "sheet-appscript.gs"
+    try:
+        found = re.search(r"var\s+SCRIPT_VERSION\s*=\s*(\d+)", gs.read_text(encoding="utf-8"))
+        return int(found.group(1)) if found else None
+    except Exception:
+        return None
+
+
 def probe_script(tab):
     """
     Hỏi thẳng Apps Script: bạn có hiểu tab này không?
@@ -110,6 +127,29 @@ def probe_script(tab):
         return False, f"Apps Script hiểu nhầm tab: xin {tab}, nó trả {result.get('sheet')}", result
 
     return True, "", result
+
+
+def version_warning(result):
+    """
+    Bản trên Google có cũ hơn file trên máy không? Trả câu cảnh báo, hoặc "".
+
+    CẢNH BÁO chứ không chặn: đẩy dữ liệu bằng bản cũ vẫn đúng, chỉ lệnh xoá mới
+    nguy hiểm (bản ≤3 xoá theo số dòng). Chặn hết mọi thao tác vì một rủi ro ở
+    thao tác người dùng hiếm khi gọi là đổi một lỗi âm thầm lấy một lỗi ồn ào.
+    """
+    tren_may = script_version_on_disk()
+    tren_google = result.get("version")
+    if tren_may is None or (tren_google or 0) >= tren_may:
+        return ""
+
+    return (
+        f"⚠ Apps Script trên Google là bản {tren_google or '≤3 (chưa đánh số)'}, "
+        f"file trên máy đã là bản {tren_may}.\n"
+        f"  Đẩy dữ liệu vẫn an toàn. Nhưng ĐỪNG xoá dòng cho tới khi dán lại: "
+        f"bản ≤3 xoá theo số dòng,\n"
+        f"  xin xoá 8 quán có thể mất 28 — đã xảy ra thật.\n"
+        + HUONG_DAN_CAP_NHAT
+    )
 
 
 def check():
@@ -151,6 +191,10 @@ def push(places, sheet_tab=None):
     if not good:
         print(f"✗ DỪNG LẠI, chưa ghi gì cả.\n  {why}", file=sys.stderr)
         return 0, 0
+
+    canh_bao = version_warning(probe)
+    if canh_bao:
+        print(canh_bao, file=sys.stderr)
 
     rows_before = probe.get("rows")
     print(f"  tab {tab}: {rows_before} dòng trước khi đẩy")

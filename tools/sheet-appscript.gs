@@ -12,9 +12,12 @@
  *
  *  3. Xoá sạch nội dung file Code.gs đang có, dán toàn bộ file này vào.
  *
- *  4. Sửa dòng SHEET_TOKEN bên dưới thành một chuỗi bí mật của riêng bạn.
- *     Ví dụ tự nghĩ: "pho-bat-dan-2026-xin-chao". Nhớ chuỗi này, lát nữa
- *     phải điền y hệt vào Vercel.
+ *  4. ĐẶT TOKEN BẰNG MENU, ĐừNG GÕ VÀO MÃ: tải lại Sheet để hiện menu
+ *     🍜 FoodGuide → 🔑 Đặt token. Nghĩ một chuỗi bí mật, ví dụ
+ *     "pho-bat-dan-2026-xin-chao", lát nữa điền y hệt vào Vercel.
+ *
+ *     Token cất trong Thuộc tính tập lệnh nên lần sau cập nhật script bạn cứ
+ *     dán ĐÈ CẢ FILE, không phải dán tay từng đoạn để giữ lại token.
  *
  *  5. Bấm  Triển khai (Deploy) → Tuỳ chọn triển khai mới (New deployment)
  *       • Loại (Select type)     : Ứng dụng web (Web app)
@@ -50,8 +53,67 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
-/** Chuỗi bí mật — ĐỔI THÀNH CỦA BẠN, và điền y hệt vào SHEETS_TOKEN trên Vercel */
+/**
+ * Chuỗi bí mật, PHẢI trùng SHEETS_TOKEN trên Vercel.
+ *
+ * ĐỪNG gõ vào đây. Dùng menu 🍜 FoodGuide → 🔑 Đặt token, nó cất vào Thuộc tính
+ * tập lệnh (Script Properties) của dự án Apps Script.
+ *
+ * Vì sao không để thẳng trong mã:
+ *
+ *   • File này nằm trong repo công khai trên GitHub. Token gõ vào đây là chỉ
+ *     còn cách nhớ đừng bao giờ commit — một lần quên là lộ vĩnh viễn, vì lịch
+ *     sử git giữ lại cả bản đã xoá.
+ *
+ *   • Token nằm trong mã thì mỗi lần cập nhật script phải dán tay từng đoạn để
+ *     khỏi đè mất nó. Dán tay là sẽ sót: chỉ cần một hằng số mới nằm nhầm phía
+ *     trên dòng token là bản trên Google thiếu mất, mà vẫn chạy — sai âm thầm,
+ *     đúng kiểu lỗi đã hành ta mấy lần rồi.
+ *
+ * Cất ở Script Properties thì dán ĐÈ CẢ FILE lúc nào cũng được, token không suy
+ * suyển. Nó vẫn nằm trong tài khoản Google của bạn, chỉ người sửa được Sheet
+ * mới đọc được — không công khai ra ngoài.
+ *
+ * Dòng dưới chỉ là đường lui cho bản cài cũ đã gõ thẳng vào mã.
+ */
 var SHEET_TOKEN = 'doi-chuoi-nay-thanh-cua-ban';
+
+/** Token đang dùng thật: ưu tiên Script Properties, không có thì mới đọc hằng số */
+function sheetToken_() {
+  try {
+    var saved = PropertiesService.getScriptProperties().getProperty('SHEET_TOKEN');
+    if (saved) return String(saved).trim();
+  } catch (err) {
+    // Chưa cấp quyền thì rơi xuống hằng số bên dưới
+  }
+  return SHEET_TOKEN;
+}
+
+/** Menu 🔑 Đặt token — cất chuỗi bí mật vào Script Properties */
+function DAT_TOKEN() {
+  var ui = SpreadsheetApp.getUi();
+  var answer = ui.prompt(
+    'Đặt token',
+    'Nhập chuỗi bí mật, phải trùng y hệt SHEETS_TOKEN trên Vercel.\n' +
+    'Chuỗi này được cất trong Thuộc tính tập lệnh, dán đè mã không làm mất nó.',
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (answer.getSelectedButton() !== ui.Button.OK) return;
+
+  var value = String(answer.getResponseText() || '').trim();
+  if (!value) {
+    ui.alert('Chưa nhập gì — không đổi.');
+    return;
+  }
+  if (value === 'doi-chuoi-nay-thanh-cua-ban') {
+    ui.alert('Đó là chuỗi mẫu trong file, ai đọc repo cũng biết. Nghĩ một chuỗi khác.');
+    return;
+  }
+
+  PropertiesService.getScriptProperties().setProperty('SHEET_TOKEN', value);
+  ui.alert('Đã lưu token (' + value.length + ' ký tự).\n\n' +
+           'Kiểm tra SHEETS_TOKEN trên Vercel có trùng không, rồi thử đồng bộ.');
+}
 
 /**
  * Phiên bản của CHÍNH FILE NÀY. Tăng lên mỗi khi sửa thứ gì phía máy chủ cần
@@ -66,12 +128,13 @@ var SHEET_TOKEN = 'doi-chuoi-nay-thanh-cua-ban';
  * Giờ `run.py check` đọc số này trong file trên máy rồi so với số Google trả
  * về. Lệch là báo ngay, khỏi phải đoán.
  *
+ *   5 — token cất ở Script Properties, dán đè cả file không làm mất token
  *   4 — xoá đối chiếu id trước khi xoá từng dòng (không tin số dòng đã tra)
  *   3 — đếm dòng theo cột ID, bỏ việc rải sẵn 1000 ô tick
  *   2 — thêm tab Crawl_Inbox và tham số sheet
  *   1 — bản đầu
  */
-var SCRIPT_VERSION = 4;
+var SCRIPT_VERSION = 5;
 
 /** Tên tab chính thức — dữ liệu ở đây mới lên trang web. Script tự tạo nếu chưa có. */
 var SHEET_NAME = 'FoodGuide';
@@ -149,10 +212,12 @@ function doPost(e) {
     return jsonOut_({ ok: false, error: 'Body không phải JSON.' });
   }
 
-  if (!SHEET_TOKEN || SHEET_TOKEN === 'doi-chuoi-nay-thanh-cua-ban') {
-    return jsonOut_({ ok: false, error: 'Bạn chưa đổi SHEET_TOKEN trong Apps Script.' });
+  var token = sheetToken_();
+  if (!token || token === 'doi-chuoi-nay-thanh-cua-ban') {
+    return jsonOut_({ ok: false,
+      error: 'Chưa đặt token. Mở Sheet → menu 🍜 FoodGuide → 🔑 Đặt token.' });
   }
-  if (body.token !== SHEET_TOKEN) {
+  if (body.token !== token) {
     return jsonOut_({ ok: false, error: 'Sai token — SHEETS_TOKEN trên Vercel chưa trùng SHEET_TOKEN trong Apps Script.' });
   }
 
@@ -695,6 +760,7 @@ function onOpen() {
     .createMenu('🍜 FoodGuide')
     .addItem('✅ Duyệt các quán đã tick', 'DUYET_INBOX')
     .addItem('🧹 Dọn dòng trống', 'DON_DONG_TRONG')
+    .addItem('🔑 Đặt token', 'DAT_TOKEN')
     .addSeparator()
     .addItem('🔑 Cấp quyền lần đầu', 'CAP_QUYEN_LAN_DAU')
     .addToUi();

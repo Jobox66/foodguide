@@ -1256,6 +1256,23 @@ const CITIES = [
 
 const ALL_CITIES = "Tất cả";
 
+/**
+ * Phiên bản Apps Script tối thiểu để được phép XOÁ dòng trên Sheet.
+ *
+ * PHẢI tự tay giữ khớp với SCRIPT_VERSION trong tools/sheet-appscript.gs.
+ * Không có gì trong repo ép điều đó — sửa một bên mà quên bên kia thì:
+ *
+ *   số này CAO hơn .gs  →  mọi lệnh xoá bị hoãn vĩnh viễn, không ai hiểu vì sao
+ *   số này THẤP hơn .gs →  vô hại (bản triển khai mới hơn vẫn qua cửa)
+ *
+ * Nên khi tăng SCRIPT_VERSION trong .gs, chỉ tăng số này nếu bản mới thật sự
+ * sửa thêm điều gì liên quan tới xoá.
+ *
+ * Bản ≤3 xoá theo số dòng nên có thể xoá nhầm dòng khác; bản 4 đối chiếu id
+ * ngay trước khi xoá.
+ */
+const SHEET_SCRIPT_MIN_VERSION_FOR_DELETE = 4;
+
 // Danh sách phẳng, giữ nguyên tên cũ để mọi chỗ dùng DISTRICTS (ô chọn quận khi
 // thêm/sửa quán, dò quận từ địa chỉ OpenStreetMap) không phải đổi.
 const DISTRICTS = ["Tất cả quận"].concat(

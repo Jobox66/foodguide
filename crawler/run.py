@@ -194,7 +194,7 @@ def main():
             if good:
                 tren_may = pusher.script_version_on_disk()
                 print(f"Apps Script: bản {probe.get('version') or '≤3'}"
-                      f" / file trên máy bản {tren_may}"
+                      f" / file trên máy bản {tren_may if tren_may is not None else 'KHÔNG ĐỌC ĐƯỢC'}"
                       f" · tab {config.SHEET_TAB} có {probe.get('rows')} dòng")
 
                 canh_bao = pusher.version_warning(probe)

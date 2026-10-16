@@ -1776,15 +1776,44 @@ async function checkSheetCapabilities() {
     const json = await callSheetApi({ action: "health" }, 25000);
     state.sheetStatus.rows = typeof json.rows === "number" ? json.rows : null;
     state.sheetStatus.photos = json.photos === true;
+    // Bản ≤3 không trả version → coi là 0
+    state.sheetStatus.scriptVersion = typeof json.version === "number" ? json.version : 0;
     state.sheetStatus.scriptError = "";
   } catch (e) {
     state.sheetStatus.rows = null;
     state.sheetStatus.photos = null;
+    state.sheetStatus.scriptVersion = null;   // null = CHƯA BIẾT, khác 0 = biết là bản cũ
     state.sheetStatus.scriptError = e.message;
   }
 
   renderSheetSettingsBox();
   return state.sheetStatus;
+}
+
+/**
+ * Apps Script có đủ mới để XOÁ an toàn không?
+ *
+ * Bản ≤3 xoá theo số dòng tra được lúc đầu. Chỉ cần lệnh chạy hai lần chồng
+ * nhau là số dòng đó trỏ sang quán khác — đã xảy ra thật: xin xoá 8 quán, mất
+ * 28 dòng. Bản 4 đối chiếu id ngay trước khi xoá nên không thể sai kiểu đó.
+ *
+ * Chỉ hỏi khi THẬT SỰ sắp xoá: thêm/sửa quán không cần, mà mỗi lượt hỏi đi
+ * trọn vòng tới Google mất một hai giây.
+ */
+async function canDeleteSafely() {
+  const duMoi = () => typeof state.sheetStatus.scriptVersion === "number" &&
+                      state.sheetStatus.scriptVersion >= SHEET_SCRIPT_MIN_VERSION_FOR_DELETE;
+
+  // HỎI LẠI mỗi lần, trừ khi đã biết chắc là bản đủ mới.
+  //
+  // Nhớ kết quả "bản cũ" cho cả phiên là tự bịt đường thoát: thông báo bảo
+  // người dùng dán lại script rồi bấm ☁️, nhưng ☁️ đi qua refreshSheetStatus
+  // (không đụng tới scriptVersion) nên lần nào cũng gặp lại con số cũ đã nhớ.
+  // Làm đúng hướng dẫn mà vẫn hỏng — kiểu lỗi khó chịu nhất.
+  //
+  // Chỉ nhớ kết quả TỐT, vì bản đã đủ mới thì không tự cũ đi được.
+  if (!duMoi()) await checkSheetCapabilities();
+  return duMoi();
 }
 
 function chunk(list, size) {
@@ -1818,13 +1847,42 @@ async function flushSheetQueue(options) {
       saveSheetQueue();
     }
 
-    for (const batch of chunk(deletes, SHEET_BATCH_SIZE)) {
-      await callSheetApi({ action: "delete", ids: batch });
-      state.sheetQueue.deletes = state.sheetQueue.deletes.filter(id => !batch.includes(id));
-      saveSheetQueue();
+    let deletedCount = 0;
+    if (deletes.length > 0) {
+      if (await canDeleteSafely()) {
+        for (const batch of chunk(deletes, SHEET_BATCH_SIZE)) {
+          await callSheetApi({ action: "delete", ids: batch });
+          state.sheetQueue.deletes = state.sheetQueue.deletes.filter(id => !batch.includes(id));
+          saveSheetQueue();
+          deletedCount += batch.length;
+        }
+      } else {
+        // Giữ nguyên trong hàng đợi, xoá sau khi script được cập nhật. Quán vẫn
+        // biến mất khỏi trang này — chỉ là chưa xoá trên Sheet.
+        //
+        // HAI nguyên nhân khác hẳn nhau, phải nói khác nhau: scriptVersion là
+        // null nghĩa là KHÔNG HỎI ĐƯỢC (mạng chập, Apps Script lỗi), còn một
+        // con số nhỏ hơn mốc mới là bản cũ thật. Gộp lại thành một câu thì một
+        // lần hết giờ chờ sẽ bảo người đang dùng bản 4 rằng họ đang dùng bản cũ.
+        const v = state.sheetStatus.scriptVersion;
+        const khongHoiDuoc = typeof v !== "number";
+
+        const loi = khongHoiDuoc
+          ? "⚠️ Chưa xoá trên Google Sheet: không hỏi được Apps Script" +
+            (state.sheetStatus.scriptError ? " (" + state.sheetStatus.scriptError + ")" : "") +
+            ". Quán đã xoá khỏi trang, sẽ xoá nốt trên Sheet ở lần đồng bộ sau."
+          : "⚠️ Chưa xoá trên Google Sheet: Apps Script đang là bản " + v +
+            ", xoá bằng bản đó có thể mất nhầm dòng khác. " +
+            "Dán lại tools/sheet-appscript.gs rồi bấm ☁️ lần nữa.";
+
+        if (!silent) showToast(loi);
+        else console.warn("Hoãn xoá trên Sheet: " +
+                          (khongHoiDuoc ? "chưa hỏi được phiên bản Apps Script"
+                                        : "bản " + v + " < " + SHEET_SCRIPT_MIN_VERSION_FOR_DELETE));
+      }
     }
 
-    return { pushed: upserts.length, deleted: deletes.length };
+    return { pushed: upserts.length, deleted: deletedCount };
   } catch (e) {
     // Hàng đợi giữ nguyên phần chưa gửi được, lần sau thử lại
     saveSheetQueue();

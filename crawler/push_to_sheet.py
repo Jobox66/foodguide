@@ -139,7 +139,20 @@ def version_warning(result):
     """
     tren_may = script_version_on_disk()
     tren_google = result.get("version")
-    if tren_may is None or (tren_google or 0) >= tren_may:
+
+    # KHÔNG im lặng khi không đọc được file. "Không kiểm được" với "kiểm xong,
+    # khớp" là hai chuyện khác hẳn — gộp chúng làm một nghĩa là một file .gs bị
+    # xoá hay đổi chỗ sẽ âm thầm tắt luôn phép đối chiếu, đúng kiểu lỗi mà cả
+    # cơ chế phiên bản này sinh ra để chặn.
+    if tren_may is None:
+        return (
+            "⚠ Không đọc được SCRIPT_VERSION trong tools/sheet-appscript.gs "
+            "nên KHÔNG đối chiếu được phiên bản.\n"
+            f"  Google đang báo bản {tren_google if tren_google is not None else '(không nói)'}. "
+            "Kiểm tra file .gs còn nguyên chỗ cũ không."
+        )
+
+    if (tren_google or 0) >= tren_may:
         return ""
 
     return (

@@ -73,6 +73,9 @@
         <button class="view-tab active" data-view="explorer" role="tab" aria-selected="true">
           🔍 Khám phá quán ăn
         </button>
+        <button class="view-tab" data-view="list" role="tab" aria-selected="false">
+          ☰ Danh sách nhanh
+        </button>
         <button class="view-tab" data-view="portal" role="tab" aria-selected="false">
           📑 Danh mục Google Maps
         </button>
@@ -159,6 +162,17 @@
       <div id="resultsCount" class="results-count">
         Đang tải danh sách quán...
       </div>
+
+      <!-- Đổi kiểu hiển thị. Trên điện thoại đây là chỗ DUY NHẤT để đổi,
+           vì thanh tab phía trên bị ẩn dưới 768px. -->
+      <div class="layout-toggle" role="group" aria-label="Kiểu hiển thị">
+        <button type="button" class="layout-toggle-btn" data-layout="list" aria-pressed="false" title="Danh sách gọn — tra cứu nhanh">
+          ☰ <span class="layout-toggle-text">Danh sách</span>
+        </button>
+        <button type="button" class="layout-toggle-btn active" data-layout="explorer" aria-pressed="true" title="Thẻ có ảnh">
+          ▦ <span class="layout-toggle-text">Thẻ</span>
+        </button>
+      </div>
     </div>
 
     <!-- MAIN VIEW: EXPLORER CARDS GRID -->
@@ -237,6 +251,12 @@
               <select id="newPlaceCategory" class="form-select">
                 <!-- Dropdown danh mục -->
               </select>
+              <div class="category-new-row" id="newPlaceCategoryNewRow" style="display: none;">
+                <input type="text" id="newPlaceCategoryNew" class="form-input"
+                       placeholder="Ví dụ: Bánh tráng trộn, Quán ốc..." maxlength="40" autocomplete="off">
+                <button type="button" id="newPlaceCategoryNewOk" class="btn-cat-ok" title="Dùng tên món này">✓</button>
+                <button type="button" id="newPlaceCategoryNewCancel" class="btn-cat-cancel" title="Huỷ">✕</button>
+              </div>
             </div>
             <div class="form-group">
               <label class="form-label" for="newPlaceDistrict">Quận / Khu vực</label>
@@ -444,6 +464,12 @@
             <div class="form-group">
               <label class="form-label" for="editPlaceCategory">Danh mục món</label>
               <select id="editPlaceCategory" class="form-select"></select>
+              <div class="category-new-row" id="editPlaceCategoryNewRow" style="display: none;">
+                <input type="text" id="editPlaceCategoryNew" class="form-input"
+                       placeholder="Ví dụ: Bánh tráng trộn, Quán ốc..." maxlength="40" autocomplete="off">
+                <button type="button" id="editPlaceCategoryNewOk" class="btn-cat-ok" title="Dùng tên món này">✓</button>
+                <button type="button" id="editPlaceCategoryNewCancel" class="btn-cat-cancel" title="Huỷ">✕</button>
+              </div>
             </div>
             <div class="form-group">
               <label class="form-label" for="editPlaceDistrict">Quận / Khu vực</label>
@@ -657,7 +683,7 @@
        =================================================================== -->
   <nav id="mobileBottomNav" class="mobile-bottom-nav" aria-label="Mobile Navigation">
     <div class="mobile-nav-items">
-      <button class="mobile-nav-btn active" data-nav-view="explorer">
+      <button class="mobile-nav-btn active" data-nav-view="browse">
         <span class="nav-icon">🔍</span>
         <span>Khám phá</span>
       </button>

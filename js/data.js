@@ -5,6 +5,25 @@
  * Số sao, lượt review và khoảng giá chính xác theo thực tế Google Maps
  */
 
+/**
+ * Danh mục do người dùng tự thêm (ví dụ "Bánh tráng trộn", "Quán ốc").
+ *
+ * Không có danh sách riêng nào được lưu: danh mục tự thêm được DỰNG LẠI từ
+ * chính các quán — ô "Danh mục" của quán chứa thẳng tên người dùng gõ. Nhờ vậy
+ * nó đi theo quán qua Google Sheet sang máy khác mà không cần thêm cột, thêm
+ * bảng, hay sửa Apps Script. Đổi lại: danh mục không còn quán nào dùng thì tự
+ * biến mất — đúng điều mong muốn, vì nó chẳng còn chỗ nào để lọc nữa.
+ *
+ * Ô đó ghi kèm tiền tố, ví dụ "custom:Bánh tráng trộn". Tiền tố KHÔNG phải để
+ * cho đẹp: nó phân biệt "người dùng cố ý đặt tên món này" với "chữ lạ rơi vào
+ * ô danh mục". Chữ lạ thì vẫn bị bỏ trống như trước — xem normalizeCategoryId.
+ * Hệ quả cần biết: gõ thẳng "Quán ốc" vào Sheet sẽ KHÔNG thành danh mục; phải
+ * gõ "custom:Quán ốc", hoặc dùng nút "➕ Thêm món mới…" trong trang.
+ */
+const CUSTOM_CATEGORY_PREFIX = "custom:";
+const CUSTOM_CATEGORY_ICON = "🏷️";
+const CUSTOM_CATEGORY_MAX_LEN = 40;
+
 const INITIAL_CATEGORIES = [
   {
     id: "all",

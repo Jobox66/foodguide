@@ -15,7 +15,11 @@ const state = {
   selectedPriceLevel: "all",
   selectedVerification: "all",
   sortBy: "featured",
-  viewMode: "explorer", // 'explorer' (thẻ chi tiết) hoặc 'portal' (danh mục bio)
+  // 'explorer' (thẻ có ảnh) · 'list' (danh sách gọn, tra cứu nhanh) · 'portal' (danh mục bio)
+  viewMode: "explorer",
+  // Kiểu duyệt gần nhất trong hai kiểu 'explorer' / 'list'. Nhờ nó, rời sang
+  // Danh mục rồi quay lại thì về đúng kiểu đang dùng chứ không bật về thẻ.
+  browseMode: "explorer",
   deletedIds: new Set(),
   backendStatus: { online: false },
   sheetStatus: { online: false, configured: false, reason: "", syncing: false },
@@ -31,6 +35,13 @@ const STORAGE_KEY_DELETED = "foodguide_hanoi_deleted_v1";
 const STORAGE_KEY_PROFILE = "foodguide_hanoi_profile_v1";
 const STORAGE_KEY_SETTINGS = "foodguide_hanoi_settings_v1";
 const STORAGE_KEY_VIEW = "foodguide_view_mode_v1";
+const STORAGE_KEY_BROWSE = "foodguide_browse_mode_v1";
+
+/** Hai kiểu bày cùng một danh sách quán — khác chế độ 'portal' (danh mục) */
+const BROWSE_MODES = ["explorer", "list"];
+
+/** Dưới bề ngang này coi như điện thoại, mặc định mở thẳng kiểu danh sách */
+const MOBILE_BREAKPOINT_PX = 768;
 const STORAGE_KEY_THEME = "foodguide_theme_v1";
 const STORAGE_KEY_SHEET_QUEUE = "foodguide_hanoi_sheet_queue_v1";
 
@@ -97,16 +108,8 @@ const PRICE_LEVEL_ALIASES = {
   "cao cap": "high", "dat": "high", "expensive": "high", "sang trong": "high"
 };
 
-/**
- * Đưa danh mục về đúng id. Chấp nhận cả tên hiển thị ("Cà phê & Trà") vì
- * người nhập tay trong Sheet và AI parser đều hay ghi tên thay vì id.
- * Không nhận ra thì trả rỗng — quán vẫn hiện ở "Tất cả", chỉ là chưa xếp
- * danh mục. Thà để trống còn hơn gán bừa vào một danh mục sai.
- */
-function normalizeCategoryId(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-
+/** Khớp một chuỗi với danh mục DỰNG SẴN, không khớp chắc chắn thì trả rỗng */
+function matchBuiltInCategory(raw) {
   const real = INITIAL_CATEGORIES.filter(c => c.id !== "all");
   if (real.some(c => c.id === raw)) return raw;
 
@@ -125,6 +128,74 @@ function normalizeCategoryId(value) {
     return name.indexOf(target) !== -1 || target.indexOf(name) !== -1;
   });
   return hits.length === 1 ? hits[0].id : "";
+}
+
+/**
+ * Đưa danh mục về đúng id. Chấp nhận cả tên hiển thị ("Cà phê & Trà") vì
+ * người nhập tay trong Sheet và AI parser đều hay ghi tên thay vì id.
+ * Không nhận ra thì trả rỗng — quán vẫn hiện ở "Tất cả", chỉ là chưa xếp
+ * danh mục. Thà để trống còn hơn gán bừa vào một danh mục sai.
+ *
+ * NGOẠI LỆ duy nhất: chuỗi mở đầu bằng CUSTOM_CATEGORY_PREFIX là danh mục
+ * người dùng tự đặt tên ("custom:Bánh tráng trộn") — giữ nguyên. Tiền tố là
+ * thứ duy nhất phân biệt nó với chữ lạ lọt vào ô danh mục, nên mới cần có.
+ * Tên tự đặt mà trùng một danh mục dựng sẵn thì gộp về danh mục đó, để không
+ * có hai ô "Cà phê" nằm cạnh nhau.
+ */
+function normalizeCategoryId(value) {
+  const raw = String(value || "").replace(/\s+/g, " ").trim();
+  if (!raw) return "";
+
+  if (raw.toLowerCase().startsWith(CUSTOM_CATEGORY_PREFIX)) {
+    const label = raw.slice(CUSTOM_CATEGORY_PREFIX.length).trim().slice(0, CUSTOM_CATEGORY_MAX_LEN).trim();
+    if (!label) return "";
+    return matchBuiltInCategory(label) || CUSTOM_CATEGORY_PREFIX + label;
+  }
+
+  return matchBuiltInCategory(raw);
+}
+
+/** Danh mục này có phải do người dùng tự đặt tên không? */
+function isCustomCategory(categoryId) {
+  return String(categoryId || "").startsWith(CUSTOM_CATEGORY_PREFIX);
+}
+
+/** Tên hiển thị của danh mục tự đặt — bỏ tiền tố kỹ thuật đi */
+function customCategoryLabel(categoryId) {
+  return String(categoryId || "").slice(CUSTOM_CATEGORY_PREFIX.length);
+}
+
+/**
+ * Dựng lại state.categories = danh mục dựng sẵn + danh mục tự đặt đọc từ quán.
+ *
+ * Phải chạy lại sau MỌI lần danh sách quán đổi (thêm, sửa, xoá, kéo từ Sheet
+ * về), vì danh mục tự đặt sống nhờ quán: quán cuối cùng dùng nó bị đổi danh
+ * mục thì danh mục đó cũng hết.
+ */
+function rebuildCategories() {
+  const custom = new Map();
+
+  state.places.forEach(place => {
+    const id = place.category;
+    if (!isCustomCategory(id) || custom.has(id)) return;
+    custom.set(id, {
+      id,
+      name: customCategoryLabel(id),
+      icon: CUSTOM_CATEGORY_ICON,
+      description: "Danh mục bạn tự thêm cho quán của mình",
+      custom: true,
+      count: 0
+    });
+  });
+
+  const extra = [...custom.values()].sort((a, b) => a.name.localeCompare(b.name, "vi"));
+  state.categories = [...INITIAL_CATEGORIES, ...extra];
+
+  // Đang lọc theo một danh mục vừa biến mất thì quay về "Tất cả", đỡ phải nhìn
+  // một danh sách rỗng mà không hiểu vì sao
+  if (!state.categories.some(c => c.id === state.currentCategory)) {
+    state.currentCategory = "all";
+  }
 }
 
 /** Mức giá về low | mid | high, hoặc rỗng nếu không hiểu */
@@ -202,7 +273,6 @@ document.addEventListener("DOMContentLoaded", () => {
  * và để bổ sung quán mới xuất hiện ở phiên bản sau.
  */
 function initData() {
-  state.categories = [...INITIAL_CATEGORIES];
   state.deletedIds = new Set(safeParse(localStorage.getItem(STORAGE_KEY_DELETED), []));
 
   const defaultMap = new Map(INITIAL_PLACES.map(p => [p.id, p]));
@@ -223,10 +293,21 @@ function initData() {
   }
 
   state.places = merged.map(normalizePlace);
+  rebuildCategories(); // phải sau state.places: danh mục tự thêm đọc từ quán
   state.profile = { ...DEFAULT_PROFILE, ...safeParse(localStorage.getItem(STORAGE_KEY_PROFILE), {}) };
   state.settings = { apiBaseUrl: "", ...safeParse(localStorage.getItem(STORAGE_KEY_SETTINGS), {}) };
   delete state.settings.googleApiKey; // khoá không còn được lưu phía trình duyệt
-  state.viewMode = localStorage.getItem(STORAGE_KEY_VIEW) || "explorer";
+  // Điện thoại mở lần đầu thì vào thẳng Danh sách (tra cứu nhanh); máy tính giữ
+  // kiểu thẻ. Đã từng tự chọn thì tôn trọng lựa chọn đó, không ép lại.
+  const savedView = localStorage.getItem(STORAGE_KEY_VIEW);
+  const savedBrowse = localStorage.getItem(STORAGE_KEY_BROWSE);
+  const isPhone = typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT_PX}px)`).matches
+    : false;
+  const defaultBrowse = isPhone ? "list" : "explorer";
+
+  state.browseMode = BROWSE_MODES.includes(savedBrowse) ? savedBrowse : defaultBrowse;
+  state.viewMode = savedView === "portal" ? "portal" : state.browseMode;
 
   const queue = safeParse(localStorage.getItem(STORAGE_KEY_SHEET_QUEUE), null);
   state.sheetQueue = {
@@ -248,6 +329,7 @@ function savePlaces() {
 
 /** Vẽ lại mọi thứ phụ thuộc danh sách quán sau khi thêm/sửa/xoá */
 function refreshAfterDataChange() {
+  rebuildCategories();
   updateCategoryCounts();
   renderCategoryPills();
   renderProfile();
@@ -281,6 +363,7 @@ function cacheDOMElements() {
   elements.resetFiltersBtn = document.getElementById("resetFiltersBtn");
 
   elements.viewTabs = document.querySelectorAll(".view-tab");
+  elements.layoutToggleButtons = document.querySelectorAll(".layout-toggle-btn[data-layout]");
   elements.themeToggleBtn = document.getElementById("themeToggleBtn");
   elements.shareGuideBtn = document.getElementById("shareGuideBtn");
   elements.btnAddPlace = document.getElementById("btnAddPlace");
@@ -450,15 +533,29 @@ function setupEventListeners() {
     });
   });
 
+  // Nút chuyển Thẻ ⇄ Danh sách cạnh số kết quả
+  if (elements.layoutToggleButtons) {
+    elements.layoutToggleButtons.forEach(btn => {
+      btn.addEventListener("click", () => setViewMode(btn.dataset.layout));
+    });
+  }
+
   // Mobile Bottom Navigation Events
   if (elements.mobileNavButtons) {
     elements.mobileNavButtons.forEach(btn => {
       btn.addEventListener("click", () => {
-        const mode = btn.dataset.navView;
-        setViewMode(mode);
+        const nav = btn.dataset.navView;
+        // "browse" không phải một kiểu hiển thị, mà là "quay lại xem danh sách
+        // quán theo kiểu đang dùng" — bấm nó lúc đang ở Danh sách thì vẫn ở
+        // Danh sách, chứ không bị kéo ngược về thẻ.
+        setViewMode(nav === "browse" ? state.browseMode : nav);
       });
     });
   }
+
+  // Ô chọn danh mục có nút tự thêm món mới (cả form Thêm lẫn form Sửa)
+  attachCategoryPicker("newPlace");
+  attachCategoryPicker("editPlace");
 
   if (elements.btnMobileAddPlace) {
     elements.btnMobileAddPlace.addEventListener("click", openAddPlaceModal);
@@ -653,7 +750,9 @@ function renderAll() {
   renderCityPills();
   renderDistrictsPills();
   renderCategoryPills();
-  renderViewMode();
+  // setViewMode chứ không phải renderViewMode: lần vẽ đầu còn phải bật sáng
+  // đúng tab / nút chuyển kiểu, vì kiểu mặc định tuỳ theo máy đang dùng.
+  setViewMode(state.viewMode);
 }
 
 /**
@@ -841,9 +940,9 @@ function renderCategoryPills() {
       state.currentCategory = btn.dataset.catId;
       renderCategoryPills();
       
-      // Nếu đang ở Portal view, tự động chuyển sang Explorer để xem các quán của danh mục
+      // Nếu đang ở Portal view, tự động chuyển sang kiểu duyệt để xem các quán của danh mục
       if (state.viewMode === "portal" && state.currentCategory !== "all") {
-        setViewMode("explorer");
+        setViewMode(state.browseMode);
       } else {
         renderPlaces();
       }
@@ -855,22 +954,40 @@ function renderCategoryPills() {
  * Thiết lập và hiển thị theo View Mode (Explorer / Portal)
  */
 function setViewMode(mode) {
-  state.viewMode = mode;
-  localStorage.setItem(STORAGE_KEY_VIEW, mode);
-  
+  state.viewMode = BROWSE_MODES.includes(mode) || mode === "portal" ? mode : "explorer";
+  if (BROWSE_MODES.includes(state.viewMode)) state.browseMode = state.viewMode;
+  localStorage.setItem(STORAGE_KEY_VIEW, state.viewMode);
+  localStorage.setItem(STORAGE_KEY_BROWSE, state.browseMode);
+
   // Đồng bộ Desktop Tabs
   if (elements.viewTabs) {
     elements.viewTabs.forEach(t => {
-      const isActive = t.dataset.view === mode;
+      const isActive = t.dataset.view === state.viewMode;
       t.classList.toggle("active", isActive);
       t.setAttribute("aria-selected", String(isActive));
     });
   }
 
-  // Đồng bộ Mobile Bottom Nav
+  // Đồng bộ nút chuyển Thẻ ⇄ Danh sách nằm cạnh số kết quả. Nút này là đường
+  // duy nhất để đổi kiểu hiển thị trên điện thoại, vì .control-bar (chỗ chứa
+  // tab của máy tính) bị ẩn hẳn dưới 768px.
+  if (elements.layoutToggleButtons) {
+    elements.layoutToggleButtons.forEach(btn => {
+      const isActive = btn.dataset.layout === state.viewMode;
+      btn.classList.toggle("active", isActive);
+      btn.setAttribute("aria-pressed", String(isActive));
+    });
+  }
+
+  // Đồng bộ Mobile Bottom Nav. Nút "Khám phá" sáng cho CẢ hai kiểu duyệt —
+  // thẻ và danh sách chỉ là hai cách bày cùng một danh sách quán.
   if (elements.mobileNavButtons) {
     elements.mobileNavButtons.forEach(btn => {
-      btn.classList.toggle("active", btn.dataset.navView === mode);
+      const nav = btn.dataset.navView;
+      const isActive = nav === "browse"
+        ? BROWSE_MODES.includes(state.viewMode)
+        : nav === state.viewMode;
+      btn.classList.toggle("active", isActive);
     });
   }
 
@@ -878,19 +995,30 @@ function setViewMode(mode) {
 }
 
 function renderViewMode() {
-  if (state.viewMode === "portal") {
-    elements.portalContainer.style.display = "block";
+  const filtersPanel = document.querySelector(".filters-panel");
+  const resultsHeader = document.querySelector(".results-header");
+  const isPortal = state.viewMode === "portal";
+
+  elements.portalContainer.style.display = isPortal ? "block" : "none";
+  if (filtersPanel) filtersPanel.style.display = isPortal ? "none" : "block";
+  if (resultsHeader) resultsHeader.style.display = isPortal ? "none" : "flex";
+
+  if (isPortal) {
+    document.body.classList.remove("mode-list");
     elements.placesContainer.style.display = "none";
-    document.querySelector(".filters-panel").style.display = "none";
-    document.querySelector(".results-header").style.display = "none";
     renderPortalView();
-  } else {
-    elements.portalContainer.style.display = "none";
-    elements.placesContainer.style.display = "grid";
-    document.querySelector(".filters-panel").style.display = "block";
-    document.querySelector(".results-header").style.display = "flex";
-    renderPlaces();
+    return;
   }
+
+  const isList = state.viewMode === "list";
+  // CSS dùng dấu này để thu gọn phần đầu trang trên điện thoại: đang tra cứu
+  // nhanh mà phải cuộn qua hết tiểu sử với mạng xã hội mới thấy quán đầu tiên
+  // thì chẳng nhanh được chỗ nào.
+  document.body.classList.toggle("mode-list", isList);
+  elements.placesContainer.style.display = isList ? "flex" : "grid";
+  elements.placesContainer.classList.toggle("places-list", isList);
+  elements.placesContainer.classList.toggle("places-grid", !isList);
+  renderPlaces();
 }
 
 /**
@@ -950,7 +1078,7 @@ function renderPortalView() {
       const catId = btn.dataset.cat;
       state.currentCategory = catId;
       renderCategoryPills();
-      setViewMode("explorer");
+      setViewMode(state.browseMode);
     });
   });
 }
@@ -1044,6 +1172,11 @@ function renderPlaces() {
     return;
   }
 
+  if (state.viewMode === "list") {
+    renderPlaceRows(filteredPlaces);
+    return;
+  }
+
   const FALLBACK_IMG = "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=600&q=80";
 
   let html = "";
@@ -1112,6 +1245,63 @@ function renderPlaces() {
   elements.placesContainer.innerHTML = html;
 
   // Gắn sự kiện thay cho onclick inline (tránh vỡ markup khi tên quán có dấu nháy)
+  elements.placesContainer.querySelectorAll("[data-open-place]").forEach(el => {
+    el.addEventListener("click", () => openPlaceDetailModal(el.dataset.openPlace));
+  });
+}
+
+/**
+ * Render chế độ Danh sách — một dòng một quán, không ảnh.
+ *
+ * Dùng để TRA CỨU NHANH trên điện thoại: thẻ có ảnh đẹp nhưng mỗi màn hình chỉ
+ * vừa một quán rưỡi, phải cuộn mãi mới thấy hết. Dòng gọn thì một màn hình
+ * khoảng bảy tám quán, lướt mắt là ra. Biểu tượng danh mục thay cho ảnh vì nó
+ * hiện ngay, không chờ tải, không nhảy layout.
+ */
+function renderPlaceRows(places) {
+  let html = "";
+
+  places.forEach(place => {
+    const categoryObj = state.categories.find(c => c.id === place.category) || {};
+    const categoryName = categoryObj.name ? categoryObj.name.split("(")[0].trim() : "";
+    const reviewText = formatReviewCount(place.reviewCount);
+    const mapsUrl = place.mapsUrl || buildMapsSearchUrl(place);
+
+    // Hàng phụ: chỉ ghép những thứ thật sự có, để không hiện ra chuỗi "· ·".
+    // Không nhắc lại tên danh mục ở đây — biểu tượng bên trái đã nói điều đó
+    // rồi, và nhường chỗ cho khoảng giá thì dòng mới đủ rộng, không bị cắt cụt.
+    const meta = [
+      place.district ? `📍 ${escapeHtml(place.district)}` : "",
+      place.priceRange ? `💵 ${escapeHtml(place.priceRange)}` : "",
+      place.time ? `⏰ ${escapeHtml(place.time)}` : ""
+    ].filter(Boolean).join(' <span class="row-dot">·</span> ');
+
+    html += `
+      <article class="place-row" data-id="${escapeHtml(place.id)}">
+        <button class="row-main" type="button" data-open-place="${escapeHtml(place.id)}">
+          <span class="row-icon" title="${escapeHtml(categoryName || "Chưa xếp danh mục")}">${escapeHtml(categoryObj.icon || "🍜")}</span>
+          <span class="row-text">
+            <span class="row-title-line">
+              <span class="row-title">${escapeHtml(place.name)}</span>
+              ${place.verified ? `<span class="row-verified" title="Đã đối chiếu với Google Maps">✅</span>` : ""}
+            </span>
+            <span class="row-meta">${meta || '<span class="value-missing">Chưa có thông tin khu vực</span>'}</span>
+            ${place.mustTry ? `<span class="row-musttry">✨ ${escapeHtml(place.mustTry)}</span>` : ""}
+          </span>
+          <span class="row-rating">
+            <span class="row-stars">★ ${formatRating(place.rating)}</span>
+            ${reviewText ? `<span class="row-reviews">${escapeHtml(reviewText)}</span>` : ""}
+          </span>
+        </button>
+        <a class="row-maps" href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener"
+           title="Mở ${escapeHtml(place.name)} trên Google Maps"
+           aria-label="Mở ${escapeHtml(place.name)} trên Google Maps">📍</a>
+      </article>
+    `;
+  });
+
+  elements.placesContainer.innerHTML = html;
+
   elements.placesContainer.querySelectorAll("[data-open-place]").forEach(el => {
     el.addEventListener("click", () => openPlaceDetailModal(el.dataset.openPlace));
   });
@@ -1203,6 +1393,134 @@ function openPlaceDetailModal(placeId) {
 /**
  * Mở Modal thêm quán mới
  */
+/* ===================================================================
+   Ô CHỌN DANH MỤC (có nút tự thêm món mới)
+   =================================================================== */
+
+/** Giá trị quy ước của dòng "Thêm món mới" — không bao giờ được lưu vào quán */
+const NEW_CATEGORY_OPTION = "__them_moi__";
+
+/**
+ * Đổ danh sách danh mục vào một ô <select>.
+ *
+ * Luôn kèm dòng cuối "➕ Thêm món mới…" để gõ tên riêng (bánh tráng trộn,
+ * quán ốc...). Nếu quán đang sửa mang một danh mục lạ — ai đó gõ thẳng trên
+ * Google Sheet chẳng hạn — thì dòng đó cũng được thêm vào, nếu không ô chọn sẽ
+ * nhảy về trống và lần lưu sau âm thầm xoá mất danh mục cũ.
+ */
+function fillCategorySelect(select, selectedId) {
+  if (!select) return;
+  const chosen = selectedId || "";
+
+  let html = `<option value="">— Chưa chọn danh mục —</option>`;
+  state.categories.filter(c => c.id !== "all").forEach(c => {
+    html += `<option value="${escapeHtml(c.id)}">${escapeHtml(c.icon)} ${escapeHtml(c.name)}</option>`;
+  });
+  if (chosen && !state.categories.some(c => c.id === chosen)) {
+    const label = isCustomCategory(chosen) ? customCategoryLabel(chosen) : chosen;
+    html += `<option value="${escapeHtml(chosen)}">${CUSTOM_CATEGORY_ICON} ${escapeHtml(label)}</option>`;
+  }
+  html += `<option value="${NEW_CATEGORY_OPTION}">➕ Thêm món mới…</option>`;
+
+  select.innerHTML = html;
+  select.value = chosen;
+  select.dataset.lastValue = chosen;
+}
+
+/** Thêm một lựa chọn vào <select> rồi chọn luôn nó (nếu chưa có sẵn) */
+function selectCategoryOption(select, categoryId) {
+  const existing = [...select.options].find(o => o.value === categoryId);
+  if (!existing) {
+    const known = state.categories.find(c => c.id === categoryId);
+    const icon = known ? known.icon : CUSTOM_CATEGORY_ICON;
+    const label = known ? known.name
+      : isCustomCategory(categoryId) ? customCategoryLabel(categoryId)
+      : categoryId;
+    const option = new Option(`${icon} ${label}`, categoryId);
+    // Chèn trước dòng "Thêm món mới…" để dòng đó luôn nằm cuối
+    select.add(option, select.options.length - 1);
+  }
+  select.value = categoryId;
+  select.dataset.lastValue = categoryId;
+}
+
+/**
+ * Gắn hành vi "thêm món mới" cho cặp ô chọn + ô gõ tên của một form.
+ *
+ * Chọn dòng "➕ Thêm món mới…" sẽ hiện ô gõ tên và ĐƯA Ô CHỌN VỀ GIÁ TRỊ CŨ
+ * ngay lập tức — nhờ vậy nếu người dùng bỏ ngang (đóng modal, bấm Lưu luôn)
+ * thì quán vẫn giữ danh mục cũ chứ không bị gán giá trị quy ước "__them_moi__".
+ */
+function attachCategoryPicker(prefix) {
+  const select = document.getElementById(prefix + "Category");
+  const row = document.getElementById(prefix + "CategoryNewRow");
+  const input = document.getElementById(prefix + "CategoryNew");
+  const confirmBtn = document.getElementById(prefix + "CategoryNewOk");
+  const cancelBtn = document.getElementById(prefix + "CategoryNewCancel");
+  if (!select || !row || !input || !confirmBtn || !cancelBtn) return;
+
+  const hideRow = () => {
+    row.style.display = "none";
+    input.value = "";
+  };
+
+  const confirmNew = () => {
+    const typed = input.value.replace(/\s+/g, " ").trim();
+    if (!typed) {
+      showToast("⚠️ Hãy gõ tên món, ví dụ: Bánh tráng trộn");
+      input.focus();
+      return;
+    }
+
+    // Gắn tiền tố rồi mới chuẩn hoá: tiền tố đánh dấu "người dùng cố ý đặt tên
+    // này", còn normalizeCategoryId lo phần gõ trúng tên một danh mục dựng sẵn
+    // ("Cà phê") thì gộp về danh mục đó thay vì đẻ thêm bản gần trùng
+    const categoryId = normalizeCategoryId(CUSTOM_CATEGORY_PREFIX + typed);
+    if (!categoryId) {
+      showToast("⚠️ Tên món chưa hợp lệ.");
+      return;
+    }
+
+    selectCategoryOption(select, categoryId);
+    hideRow();
+    showToast(isCustomCategory(categoryId)
+      ? `🏷️ Đã chọn "${customCategoryLabel(categoryId)}" — lưu quán là danh mục này hiện ra.`
+      : `✅ "${typed}" trùng danh mục có sẵn, đã chọn giúp bạn.`);
+  };
+
+  select.addEventListener("change", () => {
+    if (select.value !== NEW_CATEGORY_OPTION) {
+      select.dataset.lastValue = select.value;
+      hideRow();
+      return;
+    }
+    select.value = select.dataset.lastValue || "";
+    row.style.display = "flex";
+    input.focus();
+  });
+
+  // Enter trong ô này phải là "xong tên món", không phải "gửi cả form"
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      confirmNew();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      hideRow();
+    }
+  });
+
+  confirmBtn.addEventListener("click", confirmNew);
+  cancelBtn.addEventListener("click", hideRow);
+}
+
+/** Đọc danh mục đang chọn, chặn giá trị quy ước lọt vào dữ liệu quán */
+function readCategoryValue(selectId) {
+  const select = document.getElementById(selectId);
+  if (!select) return "";
+  return select.value === NEW_CATEGORY_OPTION ? "" : select.value;
+}
+
 function openAddPlaceModal() {
   if (!elements.addPlaceModal) return;
 
@@ -1214,14 +1532,9 @@ function openAddPlaceModal() {
   resetPhotoField("newPlace", "");
 
   // Danh mục — có lựa chọn trống để không bị gán bừa khi chưa nhận diện được
-  const catSelect = document.getElementById("newPlaceCategory");
-  if (catSelect) {
-    let catHtml = `<option value="">— Chưa chọn danh mục —</option>`;
-    state.categories.filter(c => c.id !== "all").forEach(c => {
-      catHtml += `<option value="${escapeHtml(c.id)}">${escapeHtml(c.icon)} ${escapeHtml(c.name)}</option>`;
-    });
-    catSelect.innerHTML = catHtml;
-  }
+  fillCategorySelect(document.getElementById("newPlaceCategory"), "");
+  const newCatRow = document.getElementById("newPlaceCategoryNewRow");
+  if (newCatRow) newCatRow.style.display = "none";
 
   // Quận — cũng có lựa chọn trống thay vì mặc định "Hoàn Kiếm"
   const distSelect = document.getElementById("newPlaceDistrict");
@@ -2778,7 +3091,12 @@ function fillAddFormFromScan(found) {
   setValue("newPlaceTags", Array.isArray(found.tags) ? found.tags.join(", ") : "");
 
   const categorySelect = document.getElementById("newPlaceCategory");
-  if (categorySelect) categorySelect.value = found.category || "";
+  if (categorySelect) {
+    // Quét có thể trả về danh mục chưa có trong ô chọn; thêm vào rồi chọn,
+    // chứ gán thẳng .value cho một giá trị lạ thì ô chọn lặng lẽ về trống
+    if (found.category) selectCategoryOption(categorySelect, found.category);
+    else { categorySelect.value = ""; categorySelect.dataset.lastValue = ""; }
+  }
 
   const districtSelect = document.getElementById("newPlaceDistrict");
   if (districtSelect) districtSelect.value = found.district || "";
@@ -2836,7 +3154,7 @@ function handleAddPlaceSubmit(e) {
   const newPlace = {
     id: "place-" + Date.now(),
     name,
-    category: readValue("newPlaceCategory"),
+    category: readCategoryValue("newPlaceCategory"),
     district: readValue("newPlaceDistrict"),
     address,
     mapsUrl: mapsUrlInput || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name + " " + address)}`,
@@ -3051,15 +3369,9 @@ function openEditPlaceModal(placeId) {
   const place = state.places.find(p => p.id === placeId);
   if (!place || !elements.editPlaceModal) return;
 
-  const catSelect = document.getElementById("editPlaceCategory");
-  if (catSelect) {
-    let catHtml = "";
-    state.categories.filter(c => c.id !== "all").forEach(c => {
-      catHtml += `<option value="${c.id}">${c.icon} ${c.name}</option>`;
-    });
-    catSelect.innerHTML = `<option value="">— Chưa chọn danh mục —</option>` + catHtml;
-    catSelect.value = place.category || "";
-  }
+  fillCategorySelect(document.getElementById("editPlaceCategory"), place.category || "");
+  const editCatRow = document.getElementById("editPlaceCategoryNewRow");
+  if (editCatRow) editCatRow.style.display = "none";
 
   const distSelect = document.getElementById("editPlaceDistrict");
   if (distSelect) {
@@ -3098,7 +3410,7 @@ function handleEditPlaceSubmit(e) {
   if (index === -1) return;
 
   const name = document.getElementById("editPlaceName").value.trim();
-  const category = document.getElementById("editPlaceCategory").value;
+  const category = readCategoryValue("editPlaceCategory");
   const district = document.getElementById("editPlaceDistrict").value;
   const address = document.getElementById("editPlaceAddress").value.trim();
   const mapsUrl = document.getElementById("editPlaceMapsUrl").value.trim() || `https://maps.google.com/?q=${encodeURIComponent(name + " " + address)}`;

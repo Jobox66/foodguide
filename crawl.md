@@ -12,6 +12,14 @@ Tài liệu này ghi lại toàn bộ chiến lược, kiến trúc và quy trì
 > | Michelin "HTML tĩnh, không bị chặn", dùng `requests` + BeautifulSoup | Sai. Trang có **AWS WAF** với thử thách JS — `curl` nhận HTTP 202, 0 link quán. Phải dùng Playwright, nên Bước 1 **không** nhanh hơn Bước 3. |
 > | Bước 4 Cách 2: `POST /api/sheet` với `action: "push"` | Ghi thẳng vào tab **FoodGuide**, phá đúng cơ chế duyệt 2 tab. Đã thêm tham số `sheet` để đẩy vào `Crawl_Inbox`. |
 > | `category`: `"Phở & Bún"`, `"Cà phê & Trà"` | App lọc theo **id** (`mon-soi`, `cafe-chill`). Ghi tên hiển thị thì quán biến mất khỏi bộ lọc. |
+
+> **Muốn tự đặt tên danh mục?** Gõ thẳng vào ô Danh mục với tiền tố `custom:`,
+> ví dụ `custom:Bánh tráng trộn` hay `custom:Quán ốc`. Trang sẽ tự dựng nút lọc
+> mới cho nó, trên mọi máy. Thiếu tiền tố thì chữ đó bị coi là rác và ô danh
+> mục để trống — đây là hàng rào cố ý, để dữ liệu cào về ghi "Khác" hay
+> "Phở & Bún" không đẻ ra danh mục trùng lặp. Cách dễ hơn: trong trang, mở form
+> thêm/sửa quán rồi chọn **➕ Thêm món mới…** trong ô Danh mục, tiền tố được
+> thêm giúp.
 > | `priceLevel`: `$` / `$$` / `$$$` | App dùng `low` / `mid` / `high`. |
 >
 > Ba trường khác cũng đổi vì mâu thuẫn với nguyên tắc của chính dự án:
@@ -327,7 +335,7 @@ Bài viết trên Threads là văn bản tự do, lộn xộn. Cần đưa qua A
 | :--------------------------- | :-------------- | :-------------- | :----------------------------------------------------------------------------- |
 | **ID**                 | `id`          | string          | Mã duy nhất (ví dụ:`michelin-pho-10-ly-quoc-su`, `threads-post-12345`) |
 | **Tên quán**         | `name`        | string          | Tên quán ăn                                                                 |
-| **Danh mục**          | `category`    | string          | `Phở & Bún`, `Cà phê`, `Ăn vặt`, `Đồ nướng & Lẩu`...        |
+| **Danh mục**          | `category`    | string          | id dựng sẵn (`mon-soi`, `cafe-chill`...) hoặc tên tự đặt có tiền tố: `custom:Bánh tráng trộn` |
 | **Quận**              | `district`    | string          | `Hoàn Kiếm`, `Ba Đình`, `Quận 1`...                                 |
 | **Địa chỉ**         | `address`     | string          | Số nhà, ngõ, tên đường                                                  |
 | **Số sao**            | `rating`      | number          | Ví dụ:`4.5` (mặc định 4.0 - 5.0)                                        |

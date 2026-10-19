@@ -794,6 +794,44 @@ body {
   color: white;
 }
 
+/* Ô gõ tên món mới, hiện ra khi chọn "➕ Thêm món mới…" trong ô danh mục */
+.category-new-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.category-new-row .form-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.btn-cat-ok,
+.btn-cat-cancel {
+  flex-shrink: 0;
+  width: 40px;
+  border-radius: var(--border-radius-sm);
+  border: var(--border-card);
+  font-size: 0.95rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn-cat-ok {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+  color: #FFFFFF;
+}
+
+.btn-cat-cancel {
+  background: var(--bg-input);
+  color: var(--text-muted);
+}
+
+.btn-cat-ok:hover { filter: brightness(1.06); }
+.btn-cat-cancel:hover { color: var(--text-main); }
+
 /* ===================================================================
    EXPLORER / PLACE CARDS GRID VIEW
    =================================================================== */
@@ -815,10 +853,183 @@ body {
   font-weight: 800;
 }
 
+/* Nút đổi kiểu hiển thị (Danh sách / Thẻ) nằm cạnh số kết quả */
+.layout-toggle {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-input);
+  border: var(--border-subtle);
+  border-radius: var(--border-radius-pill);
+  padding: 3px;
+  flex-shrink: 0;
+}
+
+.layout-toggle-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-main);
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: var(--border-radius-pill);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: var(--transition);
+}
+
+.layout-toggle-btn.active {
+  background: var(--bg-card);
+  color: var(--primary);
+  box-shadow: var(--shadow-subtle);
+}
+
 .places-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 22px;
+}
+
+/* ===================================================================
+   LIST VIEW — một dòng một quán, để tra cứu nhanh trên điện thoại
+   =================================================================== */
+.places-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.place-row {
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-card);
+  border: var(--border-card);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-subtle);
+  overflow: hidden;
+  transition: var(--transition);
+}
+
+.place-row:hover {
+  border-color: rgba(22, 99, 164, 0.3);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Cả vùng chữ là một nút: trên điện thoại chạm đâu cũng mở được chi tiết */
+.row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 6px 11px 13px;
+  background: transparent;
+  border: none;
+  font-family: var(--font-main);
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.row-icon {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  font-size: 1.15rem;
+  background: var(--primary-light);
+  border-radius: var(--border-radius-sm);
+}
+
+.row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row-title-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.row-title {
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-verified {
+  font-size: 0.72rem;
+  flex-shrink: 0;
+}
+
+.row-meta,
+.row-musttry {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-musttry {
+  color: var(--accent-orange);
+  font-weight: 600;
+}
+
+.row-dot {
+  opacity: 0.45;
+  margin: 0 1px;
+}
+
+.row-rating {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  padding-left: 6px;
+}
+
+.row-stars {
+  font-size: 0.86rem;
+  font-weight: 800;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.row-reviews {
+  font-size: 0.68rem;
+  color: var(--text-light);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Nút Maps tách riêng khỏi vùng mở chi tiết, nhưng vẫn đủ rộng để chạm */
+.row-maps {
+  flex-shrink: 0;
+  width: 46px;
+  display: grid;
+  place-items: center;
+  font-size: 1.05rem;
+  text-decoration: none;
+  border-left: var(--border-subtle);
+  color: var(--text-muted);
+  transition: var(--transition);
+}
+
+.row-maps:hover {
+  background: var(--primary-light);
 }
 
 .place-card {
@@ -1638,6 +1849,80 @@ body {
   .portal-categories-grid, .places-grid {
     grid-template-columns: 1fr;
     gap: 16px;
+  }
+
+  /* Danh sách nhanh: dòng sát nhau hơn để một màn hình chứa được nhiều quán */
+  .places-list {
+    gap: 6px;
+  }
+
+  /* ...và nhường chỗ bằng cách thu gọn phần đầu trang. Tiểu sử, mạng xã hội,
+     thống kê đều hay ho nhưng chiếm trọn màn hình đầu tiên — ở kiểu Thẻ thì
+     được, ở kiểu Danh sách thì nó đẩy quán đầu tiên xuống dưới tầm mắt. */
+  body.mode-list .bio-desc,
+  body.mode-list .bio-footer,
+  body.mode-list .bio-badge {
+    display: none;
+  }
+
+  body.mode-list .hero-bio {
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+
+  body.mode-list .profile-avatar {
+    width: 52px;
+    height: 52px;
+  }
+
+  /* Danh mục: một hàng cuộn ngang thay cho lưới hai cột, đỡ khoảng 240px */
+  body.mode-list .categories-pills {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 6px;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+
+  body.mode-list .categories-pills::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* width:100% là của lưới hai cột ở kiểu Thẻ; hàng cuộn ngang phải gỡ nó ra,
+     không thì nút đầu tiên chiếm trọn bề ngang và che hết các nút còn lại */
+  body.mode-list .cat-pill {
+    flex-shrink: 0;
+    width: auto;
+  }
+
+  body.mode-list .categories-slider-wrapper,
+  body.mode-list .filters-panel {
+    margin-bottom: 10px;
+  }
+
+  .row-main {
+    padding: 10px 4px 10px 10px;
+    gap: 10px;
+  }
+
+  .row-icon {
+    width: 34px;
+    height: 34px;
+    font-size: 1.05rem;
+  }
+
+  .row-title { font-size: 0.92rem; }
+  .row-meta, .row-musttry { font-size: 0.75rem; }
+  .row-maps { width: 42px; }
+
+  .results-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .results-count {
+    font-size: 0.86rem;
   }
 
   .form-row {

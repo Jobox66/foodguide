@@ -2011,6 +2011,9 @@ function saveSheetQueue() {
   } catch (e) {
     console.warn("Không lưu được hàng đợi đồng bộ:", e.message);
   }
+  // Hàng đợi vừa đổi thì dải báo phải đổi theo — nếu không, nó đứng im với con
+  // số cũ cho tới lần vẽ lại tình cờ nào đó
+  updateSheetButton();
   updateSheetButton();
   renderSheetSettingsBox();
 }
@@ -2023,7 +2026,34 @@ function queueSheetUpsert(place) {
   state.sheetQueue.deletes = state.sheetQueue.deletes.filter(id => id !== place.id);
   saveSheetQueue();
 
-  flushSheetQueue({ silent: true });
+  flushThenReport(place.id, place.name);
+}
+
+/**
+ * Đẩy lên Sheet rồi NÓI THẬT kết quả.
+ *
+ * Trước đây chỗ này gọi flushSheetQueue({silent:true}) và vứt kết quả đi, nên
+ * đẩy hỏng thì người dùng vẫn chỉ thấy "🎉 Đã thêm quán" — tưởng xong rồi, mở
+ * máy khác lại không thấy đâu. Toast mừng vẫn hiện trước (quán đã lưu ở máy
+ * này thật), chỉ thêm một lời đính chính nếu nó chưa ra khỏi máy.
+ */
+async function flushThenReport(placeId, placeName) {
+  try {
+    await flushSheetQueue({ silent: true });
+  } catch (e) {
+    console.warn("Đẩy lên Sheet thất bại:", e.message);
+  }
+
+  const conPending = placeId
+    ? Boolean(state.sheetQueue.upserts[placeId]) || state.sheetQueue.deletes.includes(placeId)
+    : pendingSheetCount() > 0;
+
+  if (!conPending) return;
+
+  const ten = placeName ? `"${placeName}"` : "Thay đổi vừa rồi";
+  showToast(state.sheetStatus.configured
+    ? `⚠️ ${ten} mới lưu ở máy này, CHƯA lên Google Sheet — máy khác sẽ chưa thấy. Sẽ tự thử lại.`
+    : `⚠️ ${ten} mới lưu ở máy này. Chưa nối được Google Sheet nên máy khác chưa thấy.`);
 }
 
 function queueSheetDelete(placeId) {
@@ -2035,7 +2065,7 @@ function queueSheetDelete(placeId) {
   }
   saveSheetQueue();
 
-  flushSheetQueue({ silent: true });
+  flushThenReport(placeId, "");
 }
 
 async function callSheetApi(payload, timeoutMs = 30000) {
@@ -2147,6 +2177,13 @@ async function flushSheetQueue(options) {
 
   if (upserts.length === 0 && deletes.length === 0) {
     return { pushed: 0, deleted: 0 };
+  }
+  // Trước đây chỗ này bỏ cuộc ngay. Nhưng "chưa cấu hình" phần lớn chỉ nghĩa là
+  // CHƯA HỎI XONG: refreshSheetStatus chạy nền lúc mở trang và mất tới 8 giây,
+  // nên ai thêm quán ngay khi trang vừa hiện sẽ rơi đúng vào khoảng trống đó —
+  // quán nằm lại hàng đợi, không ai hay. Hỏi lại một lần rồi mới kết luận.
+  if (!state.sheetStatus.configured) {
+    await refreshSheetStatus();
   }
   if (!state.sheetStatus.configured) {
     if (!silent) showToast("☁️ Chưa nối Google Sheet — mở ⚙️ Nguồn dữ liệu để xem cách cài.");
@@ -2403,7 +2440,47 @@ async function syncWithSheet() {
 }
 
 /** Cập nhật hình thức nút ☁️ theo trạng thái kết nối và số việc đang chờ */
+/**
+ * Dải báo "còn N thay đổi chưa lên Google Sheet", kèm nút đẩy lại.
+ *
+ * Lý do tồn tại: huy hiệu trên nút ☁️ là dấu hiệu DUY NHẤT của hàng đợi kẹt,
+ * mà nút ☁️ nằm trong .header-actions — khối CSS ẩn hẳn dưới 768px. Trên điện
+ * thoại, hàng đợi kẹt vừa không nhìn thấy vừa không bấm đẩy lại được.
+ */
+function renderSyncPendingBar() {
+  const bar = document.getElementById("syncPendingBar");
+  if (!bar) return;
+
+  const pending = pendingSheetCount();
+  if (pending === 0 || state.sheetStatus.syncing) {
+    bar.style.display = "none";
+    return;
+  }
+
+  bar.style.display = "flex";
+  bar.innerHTML = `
+    <span class="sync-pending-text">
+      ⏳ <strong>${pending}</strong> thay đổi chưa lên Google Sheet —
+      ${state.sheetStatus.configured
+        ? "máy khác sẽ chưa thấy."
+        : "chưa nối được Sheet" + (state.sheetStatus.reason ? ` (${escapeHtml(state.sheetStatus.reason)})` : "") + "."}
+    </span>
+    <button type="button" id="syncPendingRetry" class="sync-pending-btn">Đẩy lên ngay</button>
+  `;
+
+  bar.querySelector("#syncPendingRetry").addEventListener("click", async () => {
+    await refreshSheetStatus();
+    const result = await flushSheetQueue({ silent: false });
+    if (result && pendingSheetCount() === 0) {
+      showToast(`☁️ Đã đẩy ${result.pushed} thay đổi lên Google Sheet.`);
+    }
+    updateSheetButton();
+  });
+}
+
 function updateSheetButton() {
+  renderSyncPendingBar();
+
   const btn = elements.btnSyncSheet;
   if (!btn) return;
 

@@ -853,6 +853,51 @@ body {
   font-weight: 800;
 }
 
+/* Dải báo "còn thay đổi chưa lên Google Sheet" */
+.sync-pending-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 11px 16px;
+  background: var(--accent-yellow-light);
+  border: 1.5px solid var(--accent-yellow);
+  border-radius: var(--border-radius-md);
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.sync-pending-text strong {
+  color: var(--accent-orange);
+  font-weight: 800;
+}
+
+.sync-pending-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--primary-dark);
+  background: var(--primary);
+  color: #FFFFFF;
+  font-family: var(--font-main);
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 7px 16px;
+  border-radius: var(--border-radius-pill);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.sync-pending-btn:hover {
+  background: var(--primary-hover);
+}
+
+[data-theme="dark"] .sync-pending-bar {
+  background: rgba(252, 211, 77, 0.1);
+  border-color: rgba(252, 211, 77, 0.45);
+}
+
 /* Nút đổi kiểu hiển thị (Danh sách / Thẻ) nằm cạnh số kết quả */
 .layout-toggle {
   display: flex;

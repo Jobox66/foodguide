@@ -284,6 +284,10 @@ function initData() {
       .filter(p => p && p.id && !state.deletedIds.has(p.id))
       .map(p => (defaultMap.has(p.id) ? { ...defaultMap.get(p.id), ...p } : p));
 
+    // Quán dựng sẵn vắng mặt trong bản lưu được bổ sung lại, TRỪ khi đã nằm
+    // trong deletedIds. Lượt kéo từ Sheet về ghi vào deletedIds mọi quán đã bị
+    // xoá ở máy khác (xem pullFromSheet), nên chính dòng điều kiện này là thứ
+    // chặn chúng sống lại — không cần cơ chế nào khác.
     const known = new Set(merged.map(p => p.id));
     INITIAL_PLACES.forEach(def => {
       if (!known.has(def.id) && !state.deletedIds.has(def.id)) merged.push(def);
@@ -2300,20 +2304,61 @@ async function pullFromSheet(options) {
     if (placeSignature(merged) !== placeSignature(local)) incomingChanged.push(merged);
   });
 
-  if (incomingNew.length === 0 && incomingChanged.length === 0) {
+  // Quán còn ở máy này nhưng KHÔNG còn trên Sheet = đã bị xoá ở máy khác.
+  //
+  // Trước đây khúc này không tồn tại, nên xoá quán trên máy tính thì điện thoại
+  // vẫn giữ nguyên quán đó mãi — hai máy lệch nhau vĩnh viễn mà không ai hiểu
+  // vì sao. Loại trừ quán đang nằm trong hàng đợi đẩy lên: nó vắng mặt trên
+  // Sheet chỉ vì CHƯA kịp lên, gỡ đi là mất trắng công vừa nhập.
+  //
+  // Lượt kéo về RỖNG thì tuyệt đối không gỡ gì. Sheet trống có thể là thật,
+  // nhưng cũng có thể là Apps Script vừa chập, tab bị đổi tên, hay quyền truy
+  // cập hết hạn. Phân biệt hai trường hợp đó là không thể, mà đoán sai một lần
+  // là xoá sạch dữ liệu trên máy — nên luôn chọn vế không mất gì.
+  const sheetIds = new Set(rows.map(r => r.id));
+  const removedIds = rows.length === 0 ? new Set() : new Set(
+    state.places
+      .filter(p => !sheetIds.has(p.id) && !state.sheetQueue.upserts[p.id])
+      .map(p => p.id)
+  );
+
+  if (incomingNew.length === 0 && incomingChanged.length === 0 && removedIds.size === 0) {
     if (!silent) showToast("✅ Máy và Google Sheet đã khớp nhau.");
-    return { added: 0, updated: 0 };
+    return { added: 0, updated: 0, removed: 0 };
   }
 
-  // Ghi đè bản ở máy là thao tác mất dữ liệu — hỏi trước
-  if (!silent && incomingChanged.length > 0) {
+  // VAN AN TOÀN: lượt đồng bộ nền chỉ được gỡ khi số quán phải gỡ là thiểu số.
+  //
+  // Gỡ 3 trên 88 quán là chuyện thường ngày — xoá vài quán ở máy khác. Gỡ 55
+  // trên 60 thì không: nhiều khả năng Sheet vừa bị dọn nhầm, đổi tên tab, hoặc
+  // máy này chưa từng đẩy bộ quán của nó lên. Đoán sai ở quy mô đó là mất sạch
+  // dữ liệu mà người dùng không hề bấm gì. Những lần như vậy để họ tự quyết
+  // bằng nút ☁️ — ở đó có hộp thoại hỏi rõ ràng.
+  const QUA_NHIEU = 0.3;
+  if (silent && removedIds.size > 0 &&
+      removedIds.size > Math.max(5, state.places.length * QUA_NHIEU)) {
+    console.warn(`Hoãn gỡ ${removedIds.size} quán: quá nhiều so với ${state.places.length} quán đang có.`);
+    showToast(`⚠️ Google Sheet đang thiếu ${removedIds.size} quán so với máy này. ` +
+              `Bấm ☁️ để xem và quyết định — đồng bộ nền không tự gỡ nhiều đến thế.`);
+    removedIds.clear();
+  }
+
+  // Ghi đè và gỡ bỏ đều là thao tác mất dữ liệu — hỏi trước
+  if (!silent && (incomingChanged.length > 0 || removedIds.size > 0)) {
     const proceed = confirm(
       `Google Sheet có thay đổi so với bản trên máy:\n\n` +
       `• ${incomingChanged.length} quán sẽ được cập nhật theo Sheet\n` +
-      `• ${incomingNew.length} quán mới sẽ được thêm vào\n\n` +
+      `• ${incomingNew.length} quán mới sẽ được thêm vào\n` +
+      `• ${removedIds.size} quán đã xoá ở máy khác sẽ gỡ khỏi máy này\n\n` +
       `Bấm OK để lấy bản trên Sheet làm chuẩn.`
     );
     if (!proceed) return null;
+  }
+
+  if (removedIds.size > 0) {
+    state.places = state.places.filter(p => !removedIds.has(p.id));
+    // Nhớ là đã gỡ, để INITIAL_PLACES không dựng lại ở lần mở trang sau
+    removedIds.forEach(id => state.deletedIds.add(id));
   }
 
   incomingChanged.forEach(place => {
@@ -2341,9 +2386,10 @@ async function pullFromSheet(options) {
   }
 
   if (!silent) {
-    showToast(`📥 Đã lấy về ${incomingNew.length} quán mới, cập nhật ${incomingChanged.length} quán.`);
+    showToast(`📥 Đã lấy về ${incomingNew.length} quán mới, cập nhật ${incomingChanged.length} quán` +
+      (removedIds.size > 0 ? `, gỡ ${removedIds.size} quán đã xoá ở máy khác.` : "."));
   }
-  return { added: incomingNew.length, updated: incomingChanged.length };
+  return { added: incomingNew.length, updated: incomingChanged.length, removed: removedIds.size };
 }
 
 /**
@@ -2379,8 +2425,9 @@ async function syncOnOpen() {
     if (pushed === null) return null;
 
     const result = await pullFromSheet({ silent: true });
-    if (result && (result.added || result.updated)) {
-      showToast(`📥 Đã lấy từ Google Sheet: ${result.added} quán mới, ${result.updated} quán cập nhật.`);
+    if (result && (result.added || result.updated || result.removed)) {
+      showToast(`📥 Đã lấy từ Google Sheet: ${result.added} quán mới, ${result.updated} quán cập nhật` +
+        (result.removed ? `, gỡ ${result.removed} quán đã xoá ở máy khác.` : "."));
     }
     return result;
   } catch (e) {

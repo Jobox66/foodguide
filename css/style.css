@@ -28,8 +28,14 @@
   
   --text-main: #0F172A;
   --text-muted: #64748B;
-  --text-light: #94A3B8;
-  
+  /* #94A3B8 trên nền trắng chỉ đạt 2.56:1 — không đọc được. Chữ phụ (số lượt
+     đánh giá, biểu tượng trong ô tìm kiếm) giờ dùng chung sắc với --text-muted. */
+  --text-light: #64748B;
+  /* Chữ trên nền chip chưa chọn (--bg-input). --text-muted ở đó chỉ đạt 4.34:1 */
+  --text-on-muted: #475569;
+  /* Cam đủ tối để đọc được ở cỡ 12px trên nền trắng (6.5:1) */
+  --accent-orange-text: #C2410C;
+
   /* Refined Borders & Radius */
   --border-color: rgba(226, 232, 240, 0.85);
   --border-subtle: 1px solid rgba(22, 99, 164, 0.1);
@@ -77,8 +83,10 @@
   
   --text-main: #F8FAFC;
   --text-muted: #94A3B8;
-  --text-light: #64748B;
-  
+  --text-light: #94A3B8;
+  --text-on-muted: #CBD5E1;
+  --accent-orange-text: #FDBA74;
+
   --border-color: rgba(255, 255, 255, 0.08);
   --border-subtle: 1px solid rgba(255, 255, 255, 0.07);
   --border-card: 1px solid rgba(255, 255, 255, 0.09);
@@ -103,6 +111,78 @@
 html {
   scroll-behavior: smooth;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* ===================================================================
+   BIỂU TƯỢNG NÉT
+   Vẽ bằng currentColor nên tự ăn theo màu chữ của chỗ đặt nó — không
+   phải khai báo lại cho chế độ Tối, cho trạng thái đang chọn hay khi
+   di chuột. Đây là thứ emoji không làm được.
+   =================================================================== */
+.icon {
+  width: 1.15em;
+  height: 1.15em;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: -0.2em;
+}
+
+.icon-lg { width: 1.4em; height: 1.4em; }
+.icon-sm { width: 1em; height: 1em; }
+
+/* ===================================================================
+   TIÊU ĐIỂM BÀN PHÍM
+   Trước đây không có lấy một quy tắc :focus-visible nào trong toàn bộ
+   tệp, còn hai chỗ :focus thì đều tắt outline. Người dùng bàn phím
+   không biết mình đang đứng ở đâu.
+   =================================================================== */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--border-radius-sm);
+}
+
+/* Trên nền xanh đậm (nút chính) thì viền xanh chìm mất — đổi sang vàng */
+.btn-add-place:focus-visible,
+.btn-open-maps:focus-visible,
+.sync-pending-btn:focus-visible,
+.filter-chip.active:focus-visible,
+.cat-pill.active:focus-visible {
+  outline-color: var(--accent-yellow);
+}
+
+/* Liên kết nằm giữa câu — trước đây là link xanh gạch chân mặc định của trình
+   duyệt nằm lạc lõng trong một hộp đã được tạo kiểu kỹ */
+.inline-link {
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.share-modal-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 10px;
+  border-radius: 50%;
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 1.5rem;
+}
+
+/* Chỉ ẩn khỏi mắt, vẫn đọc được bằng trình đọc màn hình */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 body {
@@ -134,8 +214,11 @@ body {
   border: var(--border-card);
   border-radius: var(--border-radius-xl);
   box-shadow: var(--shadow-card);
-  padding: 26px 28px;
-  margin-bottom: 24px;
+  /* Gọn lại để thẻ quán đầu tiên lọt vào màn hình đầu trên máy tính: trước
+     đây quán đầu bắt đầu ở y=819px trên khung cao 900px, tức gần như không
+     thấy gì. */
+  padding: 20px 26px;
+  margin-bottom: 16px;
   position: relative;
   overflow: hidden;
   transition: var(--transition);
@@ -153,9 +236,11 @@ body {
 
 .bio-top-bar {
   display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .bio-badge {
@@ -227,10 +312,14 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
+/* Trước đây nút này tô xanh lá đặc — thành màu nút thứ tư trong cùng một khung
+   hình, cạnh xanh dương (Thêm quán), vàng (chip đang chọn) và đen (chip sắp
+   xếp). Bốn màu nút thì không màu nào còn nghĩa. Tải .csv là việc phụ, nên nó
+   nhận kiểu phụ; màu đặc để dành cho đúng một hành động chính mỗi khu vực. */
 .btn-export-csv {
-  background: #10B981;
-  color: white;
-  border: 1px solid #059669;
+  background: var(--bg-card);
+  color: var(--text-main);
+  border: 1.5px solid rgba(22, 99, 164, 0.2);
   font-family: var(--font-main);
   font-weight: 700;
   font-size: 0.84rem;
@@ -240,20 +329,21 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+  box-shadow: var(--shadow-subtle);
   transition: var(--transition);
 }
 
 .btn-export-csv:hover {
-  background: #059669;
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-light);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
 }
 
 .bio-profile {
   display: flex;
   align-items: center;
-  gap: 22px;
+  gap: 18px;
 }
 
 .avatar-wrapper {
@@ -262,8 +352,8 @@ body {
 }
 
 .profile-avatar {
-  width: 86px;
-  height: 86px;
+  width: 76px;
+  height: 76px;
   border-radius: 50%;
   object-fit: cover;
   border: 3px solid var(--accent-yellow);
@@ -281,9 +371,8 @@ body {
   width: 22px;
   height: 22px;
   font-size: 11px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   border: 2px solid var(--bg-card);
   box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 }
@@ -323,8 +412,8 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 18px;
-  padding-top: 16px;
+  margin-top: 14px;
+  padding-top: 12px;
   border-top: 1px dashed var(--border-color);
 }
 
@@ -376,48 +465,11 @@ body {
 }
 
 /* ===================================================================
-   VIEW MODE SWITCHER & CONTROLS
+   NÚT HÀNH ĐỘNG CHÍNH
+   -------------------------------------------------------------------
+   .control-bar / .view-mode-tabs / .view-tab đã được gỡ cùng với thanh
+   tab trùng chức năng ở đầu trang. Xem chú thích ở .layout-toggle.
    =================================================================== */
-.control-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.view-mode-tabs {
-  display: flex;
-  background: var(--bg-card);
-  border: var(--border-card);
-  border-radius: var(--border-radius-pill);
-  padding: 4px;
-  box-shadow: var(--shadow-subtle);
-}
-
-.view-tab {
-  border: none;
-  background: transparent;
-  padding: 8px 18px;
-  border-radius: var(--border-radius-pill);
-  font-family: var(--font-main);
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: var(--text-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: var(--transition);
-}
-
-.view-tab.active {
-  background: var(--accent-yellow);
-  color: #1A2433;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-
 .btn-add-place {
   background: var(--primary);
   color: white;
@@ -445,19 +497,20 @@ body {
    CATEGORY PILLS (Danh mục món ngon)
    =================================================================== */
 .categories-slider-wrapper {
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 
+/* Nhãn "DANH MỤC MÓN NGON" in hoa giãn chữ đã bị gỡ khỏi index.html: dãy chip
+   bên dưới tự nói nó là danh mục. Giữ lại lớp này cho các chỗ khác còn dùng,
+   nhưng bỏ in hoa — chữ hoa giãn làm tiếng Việt có dấu khó đọc hẳn. */
 .section-label {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 10px;
-  font-size: 0.84rem;
-  font-weight: 800;
+  font-size: 0.86rem;
+  font-weight: 700;
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 /* Desktop: Hiển thị full tất cả các danh mục theo hàng ngang, tự động xuống dòng khi hết chỗ */
@@ -474,6 +527,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-height: 40px;
   padding: 8px 16px;
   background: var(--bg-card);
   border: var(--border-card);
@@ -503,8 +557,15 @@ body {
 }
 
 .cat-icon {
-  font-size: 1.1rem;
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
+  color: var(--primary);
+  font-size: 1.05rem;
+}
+
+.cat-pill.active .cat-icon {
+  color: #1A2433;
 }
 
 .cat-name {
@@ -520,7 +581,7 @@ body {
   font-size: 0.75rem;
   font-weight: 800;
   background: var(--bg-input);
-  color: var(--text-muted);
+  color: var(--text-on-muted);
   padding: 2px 8px;
   border-radius: 12px;
   flex-shrink: 0;
@@ -539,14 +600,14 @@ body {
   background: var(--bg-card);
   border: var(--border-card);
   border-radius: var(--border-radius-lg);
-  padding: 16px 20px;
-  margin-bottom: 22px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
   box-shadow: var(--shadow-card);
 }
 
 .search-box-row {
   position: relative;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .search-icon {
@@ -554,7 +615,9 @@ body {
   left: 14px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 1.1rem;
+  display: grid;
+  place-items: center;
+  font-size: 1.05rem;
   color: var(--text-light);
   pointer-events: none;
 }
@@ -606,28 +669,23 @@ body {
 }
 
 .filter-scroll-title {
-  font-size: 0.78rem;
-  font-weight: 800;
+  font-size: 0.8rem;
+  font-weight: 700;
   color: var(--text-muted);
   flex-shrink: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
+/* Màn hình rộng thì cho xuống dòng. Trước đây hàng lọc luôn là một track cuộn
+   ngang: ở 1440px nó vẫn tràn (1245px nội dung trong khe 935px) nên chip cuối
+   bị cắt đôi ngay mép panel, dù xung quanh còn thừa chỗ. */
 .filter-scroll-track {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
-  overflow-x: auto;
   padding: 4px 2px;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
   flex: 1;
-}
-
-.filter-scroll-track::-webkit-scrollbar {
-  display: none;
+  min-width: 0;
 }
 
 .filter-chip {
@@ -637,16 +695,21 @@ body {
   font-family: var(--font-main);
   font-size: 0.82rem;
   font-weight: 700;
-  padding: 6px 13px;
+  min-height: 36px;
+  padding: 7px 14px;
   background: var(--bg-input);
   border: 1px solid var(--border-color);
-  color: var(--text-muted);
+  color: var(--text-on-muted);
   cursor: pointer;
   box-shadow: var(--shadow-subtle);
   transition: var(--transition);
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+}
+
+.filter-chip .icon {
+  color: var(--text-light);
 }
 
 .filter-chip:hover {
@@ -655,24 +718,20 @@ body {
   transform: translateY(-1px);
 }
 
+/* MỘT kiểu "đang chọn" duy nhất cho mọi nhóm chip.
+   Trước đây mỗi nhóm một màu — giá xanh dương, sắp xếp đen, xác minh xanh lá —
+   nên không ai học được "màu này nghĩa là đang chọn". Vàng cũng là màu đã dùng
+   cho chip danh mục đang chọn, và chữ gần đen trên vàng đạt ~12:1 ở cả hai chế
+   độ Sáng/Tối, thay cho cặp trắng-trên-xanh-lá chỉ đạt 2.54:1. */
 .filter-chip.active {
-  background: var(--primary);
-  color: white;
-  border-color: var(--primary);
-  box-shadow: 0 2px 8px rgba(22, 99, 164, 0.25);
-}
-
-.filter-chip.sort-chip.active {
-  background: #1A2433;
-  color: var(--accent-yellow);
-  border-color: #1A2433;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-}
-
-[data-theme="dark"] .filter-chip.sort-chip.active {
   background: var(--accent-yellow);
   color: #1A2433;
   border-color: var(--accent-yellow-hover);
+  box-shadow: 0 2px 10px rgba(255, 220, 78, 0.4);
+}
+
+.filter-chip.active .icon {
+  color: #1A2433;
 }
 
 .filter-divider {
@@ -732,66 +791,135 @@ body {
 }
 
 .portal-cat-icon {
-  width: 50px;
-  height: 50px;
+  width: 48px;
+  height: 48px;
   border-radius: var(--border-radius-md);
   background: var(--primary-light);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.8rem;
+  color: var(--primary);
+  display: grid;
+  place-items: center;
+  font-size: 1.5rem;
   flex-shrink: 0;
   box-shadow: var(--shadow-subtle);
 }
 
-
-
-
-.btn-open-maps-list {
-  flex: 1;
-  background: var(--accent-yellow);
-  color: #1A2433;
-  border: 1px solid var(--accent-yellow-hover);
-  font-family: var(--font-main);
-  font-weight: 700;
-  font-size: 0.85rem;
-  padding: 10px 14px;
-  border-radius: var(--border-radius-pill);
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  box-shadow: 0 2px 8px rgba(255, 220, 78, 0.35);
-  transition: var(--transition);
+.portal-cat-title {
+  font-family: var(--font-heading);
+  font-size: 1.08rem;
+  font-weight: 800;
+  color: var(--text-main);
+  line-height: 1.3;
 }
 
-.btn-open-maps-list:hover {
-  background: var(--accent-yellow-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(255, 220, 78, 0.45);
+.portal-cat-desc {
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-top: 3px;
+}
+
+.portal-cat-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.portal-cat-count strong {
+  color: var(--text-main);
+  font-weight: 800;
+}
+
+/* Lời mời thêm quán cho các danh mục còn trống — thay cho việc cho mỗi danh
+   mục rỗng một thẻ cùng cỡ với danh mục có 54 quán. Màn hình trống là một lời
+   mời làm gì đó, không phải một nút bị khoá. */
+.portal-empty-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 16px 20px;
+  background: var(--bg-card);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--border-radius-lg);
+}
+
+.portal-empty-note p {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.portal-empty-note .icon {
+  color: var(--text-light);
+}
+
+
+
+
+/* Thứ bậc hai nút này trước đây bị đảo: nút vàng nổi bật là "Mở trên Google
+   Maps" (rời khỏi trang), nút viền mờ là "Xem quán" (ở lại, và là việc chính
+   mà trang này sinh ra để làm). Giờ "Xem quán" là nút chính. */
+.portal-cat-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 .btn-explore-cat {
-  background: var(--primary-light);
-  color: var(--primary);
-  border: 1px solid rgba(22, 99, 164, 0.2);
+  background: var(--primary);
+  color: #FFFFFF;
+  border: 1px solid var(--primary-dark);
   font-family: var(--font-main);
   font-weight: 700;
-  font-size: 0.85rem;
-  padding: 10px 14px;
+  font-size: 0.88rem;
+  min-height: 44px;
+  padding: 11px 16px;
   border-radius: var(--border-radius-pill);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 7px;
+  box-shadow: 0 2px 8px rgba(22, 99, 164, 0.25);
   transition: var(--transition);
 }
 
 .btn-explore-cat:hover {
-  background: var(--primary);
-  color: white;
+  background: var(--primary-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 5px 14px rgba(22, 99, 164, 0.3);
+}
+
+.btn-open-maps-list {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  font-family: var(--font-main);
+  font-weight: 700;
+  font-size: 0.84rem;
+  min-height: 42px;
+  padding: 10px 16px;
+  border-radius: var(--border-radius-pill);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: var(--transition);
+}
+
+.btn-open-maps-list:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-light);
 }
 
 /* Ô gõ tên món mới, hiện ra khi chọn "➕ Thêm món mới…" trong ô danh mục */
@@ -837,9 +965,11 @@ body {
    =================================================================== */
 .results-header {
   display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .results-count {
@@ -898,7 +1028,16 @@ body {
   border-color: rgba(252, 211, 77, 0.45);
 }
 
-/* Nút đổi kiểu hiển thị (Danh sách / Thẻ) nằm cạnh số kết quả */
+/* ===================================================================
+   BỘ CHUYỂN CÁCH XEM (Thẻ · Danh sách · Danh mục)
+   -------------------------------------------------------------------
+   Trước đây có HAI bộ điều khiển cùng đổi một trạng thái: thanh tab ở
+   đầu trang ("Khám phá quán ăn / Danh sách nhanh / Danh mục Google
+   Maps") và cụm nút cạnh số kết quả ("Danh sách / Thẻ") — cách nhau
+   ~400px, gọi cùng một thứ bằng hai tên khác nhau, và cùng sáng một
+   lúc nên không biết cái nào mới là thật. Thanh tab đã bị gỡ; đây là
+   bộ duy nhất, và nó chạy được trên cả máy tính lẫn điện thoại.
+   =================================================================== */
 .layout-toggle {
   display: flex;
   gap: 2px;
@@ -912,29 +1051,93 @@ body {
 .layout-toggle-btn {
   border: none;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-on-muted);
   font-family: var(--font-main);
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   font-weight: 700;
-  padding: 6px 14px;
+  min-height: 38px;
+  padding: 7px 14px;
   border-radius: var(--border-radius-pill);
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   transition: var(--transition);
+}
+
+.layout-toggle-btn:hover {
+  color: var(--text-main);
 }
 
 .layout-toggle-btn.active {
   background: var(--bg-card);
   color: var(--primary);
-  box-shadow: var(--shadow-subtle);
+  box-shadow: var(--shadow-sm);
 }
 
 .places-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 22px;
+}
+
+/* ===================================================================
+   KHÔNG CÓ KẾT QUẢ
+   Các lớp này trước đây được app.js dựng ra nhưng không có lấy một
+   dòng CSS nào trong tệp, nên màn hình rỗng hiện ra lệch trái, không
+   căn giữa, nút thì tràn hết bề ngang. Màn hình trống là lời mời làm
+   gì đó, nên nó có hai lối đi: bỏ bộ lọc, hoặc thêm chính quán đang
+   tìm vào cẩm nang.
+   =================================================================== */
+.empty-state {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 48px 24px;
+  background: var(--bg-card);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--border-radius-lg);
+}
+
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--bg-input);
+  color: var(--text-light);
+  font-size: 1.6rem;
+  margin-bottom: 2px;
+}
+
+.empty-title {
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.empty-desc {
+  font-size: 0.92rem;
+  color: var(--text-muted);
+  max-width: 44ch;
+}
+
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.empty-actions .btn-view-details {
+  flex: 0 0 auto;
+  padding: 10px 20px;
 }
 
 /* ===================================================================
@@ -984,7 +1187,8 @@ body {
   height: 38px;
   display: grid;
   place-items: center;
-  font-size: 1.15rem;
+  font-size: 1.05rem;
+  color: var(--primary);
   background: var(--primary-light);
   border-radius: var(--border-radius-sm);
 }
@@ -1028,9 +1232,16 @@ body {
   text-overflow: ellipsis;
 }
 
+/* #FF6B4A trên nền trắng ở cỡ 12px chỉ đạt 2.82:1 — mà đây lại là dòng nội
+   dung đặc trưng nhất của cả cẩm nang, không thể là chữ khó đọc nhất trang. */
 .row-musttry {
-  color: var(--accent-orange);
+  color: var(--accent-orange-text);
   font-weight: 600;
+}
+
+.row-musttry .icon {
+  width: 0.95em;
+  height: 0.95em;
 }
 
 .row-dot {
@@ -1098,9 +1309,9 @@ body {
 .place-image-wrapper {
   position: relative;
   width: 100%;
-  height: 195px;
+  height: 168px;
   overflow: hidden;
-  background: #E2E8F0;
+  background: var(--bg-input);
 }
 
 .place-img {
@@ -1112,6 +1323,73 @@ body {
 
 .place-card:hover .place-img {
   transform: scale(1.05);
+}
+
+/* ===================================================================
+   Ô ẢNH KHI CHƯA CÓ ẢNH THẬT
+   -------------------------------------------------------------------
+   Bộ dữ liệu dựng sẵn dùng 61 liên kết ảnh nhưng chỉ có khoảng 30 ảnh
+   khác nhau — hai tấm lặp tới 7 lần, và chúng là ảnh stock nên thường
+   chẳng liên quan gì tới quán ("Santorini Vibes Cafe" hiện một cốc trà
+   kèm bánh quy). Ảnh sai còn tệ hơn không ảnh: cẩm nang ẩm thực bán
+   đúng cái cảm giác "chỗ này có thật, tôi đã tới".
+
+   Nên chỗ chưa có ảnh chụp thật sẽ là một ô chữ: biểu tượng danh mục
+   trên nền màu suy ra từ id quán, nên mỗi quán một sắc riêng và không
+   bao giờ đổi. Ảnh tải lên Drive vẫn hiện bình thường.
+   =================================================================== */
+.place-photo-slot {
+  /* --slot-h (sắc màu) do app.js gán theo id quán, nên mỗi quán một màu cố
+     định; độ sáng/đậm thì để CSS quyết, nhờ vậy chế độ Tối tự có bản riêng */
+  --slot-tint: hsl(var(--slot-h, 210) 68% 62% / 0.26);
+  --slot-ink: hsl(var(--slot-h, 210) 46% 31%);
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  align-content: center;
+  background:
+    linear-gradient(135deg, var(--slot-tint) 0%, transparent 72%),
+    var(--bg-input);
+  color: var(--slot-ink);
+  position: relative;
+}
+
+[data-theme="dark"] .place-photo-slot {
+  --slot-tint: hsl(var(--slot-h, 210) 58% 52% / 0.22);
+  --slot-ink: hsl(var(--slot-h, 210) 58% 78%);
+}
+
+.place-photo-slot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(135deg, rgba(0,0,0,0.028) 0 2px, transparent 2px 9px);
+  pointer-events: none;
+}
+
+.place-photo-slot .icon {
+  width: 34px;
+  height: 34px;
+  opacity: 0.85;
+}
+
+.place-photo-slot-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  opacity: 0.72;
+}
+
+.modal-hero-slot {
+  height: 180px;
+}
+
+.modal-hero-slot .icon {
+  width: 46px;
+  height: 46px;
 }
 
 .place-badge-rating {
@@ -1159,13 +1437,17 @@ body {
   flex: 1;
 }
 
+/* Bỏ in hoa giãn chữ: nhãn eyebrow kiểu đó là dấu hiệu rõ nhất của giao diện
+   dựng sẵn, và tiếng Việt có dấu viết hoa toàn bộ thì khó đọc. Trên thẻ quán
+   nhãn này đã bị gỡ hẳn — dãy chip danh mục phía trên đã nói rồi; nó chỉ còn
+   dùng trong modal chi tiết. */
 .place-category-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--primary);
-  font-size: 0.78rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 4px;
+  font-size: 0.82rem;
+  font-weight: 700;
 }
 
 .place-title {
@@ -1290,23 +1572,57 @@ body {
   box-shadow: 0 4px 12px rgba(22, 99, 164, 0.35);
 }
 
+/* "Xem chi tiết" giờ là nút chính của thẻ quán, còn Google Maps thu về một nút
+   biểu tượng bên cạnh. Trước đây ngược lại: nút xanh to là "Mở Google Maps",
+   tức hành động dẫn người dùng RỜI KHỎI cẩm nang được xếp trên hành động ở
+   lại — trên mọi thẻ, trên cả trang Danh mục. */
 .btn-view-details {
-  background: var(--bg-page);
-  color: var(--text-main);
-  border: 1px solid var(--border-color);
+  flex: 1;
+  background: var(--primary);
+  color: #FFFFFF;
+  border: 1px solid var(--primary-dark);
   font-family: var(--font-main);
   font-weight: 700;
-  font-size: 0.85rem;
+  font-size: 0.86rem;
+  min-height: 42px;
   padding: 10px 14px;
   border-radius: var(--border-radius-pill);
   cursor: pointer;
+  box-shadow: 0 2px 8px rgba(22, 99, 164, 0.22);
   transition: var(--transition);
 }
 
 .btn-view-details:hover {
-  background: var(--primary-light);
+  background: var(--primary-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 5px 14px rgba(22, 99, 164, 0.3);
+}
+
+.btn-maps-icon {
+  flex-shrink: 0;
+  width: 42px;
+  min-height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-pill);
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: var(--transition);
+}
+
+.btn-maps-icon:hover {
   border-color: var(--primary);
   color: var(--primary);
+  background: var(--primary-light);
+}
+
+/* Số lượt đánh giá trong huy hiệu điểm trên ảnh */
+.rating-count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  opacity: 0.8;
+  margin-left: 1px;
 }
 
 /* ===================================================================
@@ -1403,6 +1719,179 @@ body {
   font-weight: 800;
   color: var(--text-main);
   margin-bottom: 6px;
+}
+
+/* ===================================================================
+   MODAL CHI TIẾT QUÁN
+   -------------------------------------------------------------------
+   Thứ tự đọc: TÊN QUÁN → danh mục & điểm → địa chỉ, giá, giờ → món nên
+   gọi → nhận xét → hành động → nguồn dữ liệu.
+
+   Bản cũ đẩy tên quán xuống vị trí thứ năm (~870px): nhãn danh mục in
+   hoa, huy hiệu điểm cỡ lớn, cảnh báo "Chưa xác minh" và dòng "Nguồn:
+   Dữ liệu dựng sẵn" đều đứng trước nó. Dòng nguồn dữ liệu giờ nằm cuối
+   — nó là chú thích, không phải tiêu đề.
+   =================================================================== */
+.modal-place-name {
+  font-size: 1.5rem;
+  line-height: 1.25;
+  margin-bottom: 10px;
+}
+
+.modal-identity-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-bottom: 18px;
+}
+
+.modal-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+}
+
+.modal-rating .icon {
+  color: #D9A106;
+}
+
+[data-theme="dark"] .modal-rating .icon {
+  color: var(--accent-yellow);
+}
+
+.modal-rating .rating-count {
+  font-weight: 600;
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+/* Địa chỉ / giá / giờ. Không còn nhãn "Địa chỉ:", "Khoảng giá:", "Giờ mở
+   cửa:" — biểu tượng đủ phân biệt, và tên nhãn vẫn còn cho trình đọc màn
+   hình qua .sr-only. */
+.modal-facts {
+  display: grid;
+  gap: 9px;
+  margin-bottom: 18px;
+}
+
+.modal-fact {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.93rem;
+  line-height: 1.5;
+}
+
+.modal-fact dt {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  padding-top: 2px;
+  color: var(--text-light);
+}
+
+.modal-fact dd {
+  margin: 0;
+  color: var(--text-main);
+}
+
+.modal-must-try {
+  margin-bottom: 18px;
+  padding: 11px 15px;
+  font-size: 0.92rem;
+}
+
+/* Nhận xét: nền nhạt, vạch dọc bên trái, KHÔNG in nghiêng — chữ nghiêng có
+   dấu tiếng Việt ở cỡ nhỏ đọc rất mệt. */
+.modal-review {
+  margin: 0 0 18px;
+  padding: 13px 16px;
+  background: var(--bg-page);
+  border-left: 3px solid var(--primary);
+  border-radius: 0 10px 10px 0;
+  font-size: 0.93rem;
+  line-height: 1.65;
+  color: var(--text-main);
+  /* Dưới 80 ký tự một dòng */
+  max-width: 62ch;
+}
+
+.modal-tags {
+  margin-bottom: 18px;
+}
+
+.modal-photo-invite {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-bottom: 18px;
+  padding: 11px 14px;
+  background: var(--bg-page);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--border-radius-sm);
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+  max-width: 62ch;
+}
+
+.modal-photo-invite .icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--primary);
+}
+
+.modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.modal-actions .btn-open-maps {
+  flex: 1 1 200px;
+  min-height: 46px;
+  font-size: 0.93rem;
+}
+
+.btn-secondary-link {
+  flex: 1 1 180px;
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  text-decoration: none;
+  box-shadow: none;
+  font-size: 0.9rem;
+}
+
+.btn-secondary-link:hover {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: none;
+  box-shadow: none;
+}
+
+/* Nguồn dữ liệu: chú thích cuối trang, không phải cảnh báo đầu trang */
+.modal-provenance {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-color);
+  font-size: 0.82rem;
+  color: var(--text-muted);
 }
 
 /* Forms */
@@ -1682,7 +2171,9 @@ body {
 }
 
 .mobile-nav-btn .nav-icon {
-  font-size: 1.25rem;
+  display: grid;
+  place-items: center;
+  font-size: 1.2rem;
   line-height: 1;
 }
 
@@ -1690,8 +2181,25 @@ body {
   color: var(--primary);
 }
 
-.mobile-nav-btn.active .nav-icon {
-  transform: scale(1.15);
+/* Chấm báo trên nút Thêm khi còn thay đổi chưa đẩy lên Google Sheet */
+.mobile-nav-btn {
+  position: relative;
+}
+
+.mobile-nav-btn .nav-dot {
+  position: absolute;
+  top: 4px;
+  right: 10px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-orange);
+  border: 1.5px solid var(--bg-card);
+  display: none;
+}
+
+.mobile-nav-btn.has-pending .nav-dot {
+  display: block;
 }
 
 .mobile-nav-add-btn {
@@ -1714,6 +2222,101 @@ body {
 
 .mobile-nav-add-btn:active {
   transform: translateY(-6px) scale(0.95);
+}
+
+/* ===================================================================
+   BẢNG "THÊM" TRÊN ĐIỆN THOẠI
+   -------------------------------------------------------------------
+   .header-actions bị ẩn hẳn dưới 768px, mà thanh nav dưới lại không có
+   chỗ cho những nút nằm trong đó — nên trên điện thoại không còn đường
+   nào chạm tới Đồng bộ Google Sheet, Nguồn dữ liệu, Chia sẻ và Tải
+   .csv. Bảng này trả lại cả bốn. Nút đổi Sáng/Tối cũng chuyển vào đây:
+   nó dùng vài lần trong đời mà trước giữ nguyên một ô trên thanh nav,
+   trong khi đồng bộ dữ liệu thì không có ô nào.
+   =================================================================== */
+.more-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: none;
+  align-items: flex-end;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.more-sheet.active {
+  display: flex;
+  opacity: 1;
+}
+
+.more-sheet-card {
+  width: 100%;
+  background: var(--bg-card);
+  border-radius: 24px 24px 0 0;
+  padding: 10px 14px calc(18px + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow-modal);
+  transform: translateY(100%);
+  transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.more-sheet.active .more-sheet-card {
+  transform: translateY(0);
+}
+
+.more-sheet-grip {
+  width: 42px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border-color);
+  margin: 4px auto 12px;
+}
+
+.more-sheet-item {
+  width: 100%;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 12px 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--border-radius-md);
+  font-family: var(--font-main);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-main);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.more-sheet-item:hover,
+.more-sheet-item:active {
+  background: var(--bg-input);
+}
+
+.more-sheet-item .icon {
+  width: 21px;
+  height: 21px;
+  color: var(--primary);
+}
+
+.more-sheet-item .more-sheet-note {
+  margin-left: auto;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.more-sheet-item .more-sheet-note.is-warn {
+  color: var(--accent-orange-text);
+}
+
+.more-sheet-item .more-sheet-note.is-ok {
+  color: var(--accent-green);
 }
 
 /* Toast Notifications */
@@ -1764,15 +2367,25 @@ body {
 
 .footer-links {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
-  gap: 16px;
-  margin-bottom: 12px;
+  gap: 4px 10px;
+  margin-bottom: 10px;
 }
 
 .footer-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 10px;
   color: var(--primary);
   text-decoration: none;
   font-weight: 600;
+}
+
+.footer-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 /* ===================================================================
@@ -1817,67 +2430,163 @@ body {
     margin-bottom: 4px;
   }
 
-  .bio-desc {
-    font-size: 0.86rem;
-    margin-bottom: 6px;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+  /* ---------------------------------------------------------------
+     THU GỌN PHẦN ĐẦU TRANG — cho CẢ hai kiểu Thẻ và Danh sách.
+
+     Trước đây các quy tắc này chỉ áp cho body.mode-list. Hậu quả: ở kiểu
+     Thẻ (kiểu mặc định), quán đầu tiên bắt đầu ở y=890px trên màn hình
+     cao 844px — mở app ra là trọn một màn hình chỉ có tiểu sử, 4 nút
+     mạng xã hội, 4 ô thống kê và 4 hàng danh mục, không thấy lấy một
+     quán nào. Tiểu sử tác giả đáng có mặt, nhưng không đáng chiếm trọn
+     màn hình đầu của một cẩm nang tra cứu.
+     --------------------------------------------------------------- */
+  .bio-desc,
+  .bio-footer,
+  .bio-badge {
+    display: none;
   }
 
-  .bio-footer {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-    margin-top: 12px;
-    padding-top: 12px;
+  .hero-bio {
+    padding: 14px 16px;
+    margin-bottom: 12px;
   }
 
-  .control-bar {
-    display: none; /* Điều khiển chuyển view đã có ở mobile bottom nav */
+  .profile-avatar {
+    width: 54px;
+    height: 54px;
   }
 
-  /* Danh mục món ngon: Dạng lưới 2 cột ngang song song gọn gàng trên mobile */
+  .bio-name {
+    font-size: 1.18rem;
+  }
+
+  /* Danh mục: một hàng cuộn ngang. Lưới 2 cột trước đây cao 4 hàng (~240px)
+     mà vẫn cắt cụt 5/8 tên danh mục ("Món sợi (Phở, …", "Ăn vặt & Tráng …"). */
   .categories-slider-wrapper {
-    margin-bottom: 14px;
+    margin-bottom: 12px;
   }
 
   .categories-pills {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
     gap: 6px;
-    padding: 0;
-    overflow-x: visible;
+    padding: 2px 0 6px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .categories-pills::-webkit-scrollbar {
+    display: none;
   }
 
   .cat-pill {
-    padding: 7px 10px;
-    font-size: 0.8rem;
-    width: 100%;
-    min-width: 0;
+    flex-shrink: 0;
+    width: auto;
+    min-height: 44px; /* vùng chạm: trước đây 36px */
+    padding: 8px 14px;
+    font-size: 0.84rem;
     border-radius: var(--border-radius-md);
   }
 
-  .cat-icon {
-    font-size: 0.95rem;
-  }
-
   .cat-name {
-    font-size: 0.78rem;
+    font-size: 0.82rem;
     font-weight: 700;
   }
 
   .cat-count {
-    font-size: 0.7rem;
-    padding: 1px 6px;
+    font-size: 0.72rem;
+    padding: 2px 7px;
     margin-left: 2px;
   }
 
   .filters-panel {
-    padding: 14px;
+    padding: 12px;
     border-radius: var(--border-radius-md);
-    margin-bottom: 16px;
+    margin-bottom: 14px;
+  }
+
+  /* Nhãn "🗺️ THÀNH PHỐ:" và "⚡ LỌC:" ngốn ~35% bề ngang hàng trên máy 390px,
+     đẩy chip ra ngoài màn hình. Dãy chip tự nói nó lọc gì; nhãn vẫn còn cho
+     trình đọc màn hình. */
+  .filter-scroll-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  /* Hàng lọc trên điện thoại vẫn cuộn ngang (xuống dòng thì panel cao quá),
+     nhưng phải CHO THẤY là còn nội dung bên phải. Trước đây #quickFilterPills
+     là khe 273px nhìn vào track 1245px, không một dấu hiệu nào. */
+  .filter-scroll-wrapper {
+    position: relative;
+  }
+
+  .filter-scroll-track {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    /* Vệt mờ dần ở hai mép, tự tắt khi cuộn hết nhờ animation-timeline */
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 18px,
+                                        #000 calc(100% - 26px), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 18px,
+                                #000 calc(100% - 26px), transparent 100%);
+  }
+
+  .filter-scroll-track::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filter-chip {
+    min-height: 44px; /* vùng chạm: trước đây 31px */
+    padding: 9px 15px;
+    font-size: 0.84rem;
+  }
+
+  /* Các vùng chạm còn lại dưới ngưỡng 44px trên điện thoại */
+  .layout-toggle-btn,
+  .btn-magic-autofill,
+  .btn-photo,
+  .btn-view-details,
+  .btn-maps-icon,
+  .btn-export-csv,
+  .btn-add-place,
+  .btn-open-maps,
+  .select-filter,
+  .manager-toolbar .search-input {
+    min-height: 44px;
+  }
+
+  .btn-maps-icon {
+    width: 44px;
+  }
+
+  .modal-close-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .form-input,
+  .form-select {
+    min-height: 44px;
+  }
+
+  /* Số kết quả rút gọn để nó và bộ chuyển cách xem đứng chung một hàng, thay
+     vì bộ chuyển phải xuống dòng riêng và ngốn thêm ~55px chiều cao. */
+  .results-count {
+    font-size: 0.84rem;
+  }
+
+  .layout-toggle-btn {
+    padding: 7px 11px;
+    font-size: 0.8rem;
   }
 
   .filter-dropdowns-row {
@@ -1901,46 +2610,7 @@ body {
     gap: 6px;
   }
 
-  /* ...và nhường chỗ bằng cách thu gọn phần đầu trang. Tiểu sử, mạng xã hội,
-     thống kê đều hay ho nhưng chiếm trọn màn hình đầu tiên — ở kiểu Thẻ thì
-     được, ở kiểu Danh sách thì nó đẩy quán đầu tiên xuống dưới tầm mắt. */
-  body.mode-list .bio-desc,
-  body.mode-list .bio-footer,
-  body.mode-list .bio-badge {
-    display: none;
-  }
-
-  body.mode-list .hero-bio {
-    padding: 14px 16px;
-    margin-bottom: 10px;
-  }
-
-  body.mode-list .profile-avatar {
-    width: 52px;
-    height: 52px;
-  }
-
-  /* Danh mục: một hàng cuộn ngang thay cho lưới hai cột, đỡ khoảng 240px */
-  body.mode-list .categories-pills {
-    display: flex;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    gap: 6px;
-    padding-bottom: 4px;
-    scrollbar-width: none;
-  }
-
-  body.mode-list .categories-pills::-webkit-scrollbar {
-    display: none;
-  }
-
-  /* width:100% là của lưới hai cột ở kiểu Thẻ; hàng cuộn ngang phải gỡ nó ra,
-     không thì nút đầu tiên chiếm trọn bề ngang và che hết các nút còn lại */
-  body.mode-list .cat-pill {
-    flex-shrink: 0;
-    width: auto;
-  }
-
+  /* Kiểu Danh sách thu gọn thêm một nấc nữa so với mức đã áp cho cả hai kiểu */
   body.mode-list .categories-slider-wrapper,
   body.mode-list .filters-panel {
     margin-bottom: 10px;
@@ -1954,12 +2624,11 @@ body {
   .row-icon {
     width: 34px;
     height: 34px;
-    font-size: 1.05rem;
   }
 
   .row-title { font-size: 0.92rem; }
-  .row-meta, .row-musttry { font-size: 0.75rem; }
-  .row-maps { width: 42px; }
+  .row-meta, .row-musttry { font-size: 0.76rem; }
+  .row-maps { width: 46px; }
 
   .results-header {
     flex-wrap: wrap;
@@ -1972,6 +2641,28 @@ body {
 
   .form-row {
     grid-template-columns: 1fr;
+  }
+
+  /* Ô dán link Maps và nút "Quét & Tự điền" nằm cạnh nhau trên màn 390px thì
+     ô chỉ còn ~55% bề ngang: chữ gợi ý tràn khỏi 2 dòng rồi bị chữ bên dưới
+     đè lên. Xếp dọc thì ô dùng trọn bề ngang. */
+  .magic-input-group {
+    flex-direction: column;
+  }
+
+  .btn-magic-autofill {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Thẻ quán cao 609px trên màn 844px — chưa đầy một quán mỗi màn hình.
+     Ảnh thấp lại để mỗi lần vuốt thấy được nhiều quán hơn. */
+  .place-image-wrapper {
+    height: 150px;
+  }
+
+  .place-card-body {
+    padding: 14px 16px 16px;
   }
 
   .manager-toolbar {
@@ -2022,20 +2713,16 @@ body {
 
 /* ===================================================================
    TRẠNG THÁI XÁC MINH DỮ LIỆU (Data verification)
+   -------------------------------------------------------------------
+   Chip lọc theo trạng thái xác minh đã chuyển vào modal Quản lý quán:
+   đó là công cụ soát dữ liệu của người biên tập, không phải bộ lọc của
+   người đi ăn. Hai quy tắc tô màu riêng cho nhóm chip này cũng bỏ theo,
+   vì giờ mọi chip dùng chung một kiểu "đang chọn".
+
+   Huy hiệu "Chưa xác minh" không còn hiện trên thẻ quán nữa — nó đúng
+   với 60/60 quán nên chẳng cảnh báo được gì, chỉ làm mọi quán trông
+   đáng ngờ. Chỉ quán ĐÃ xác minh mới được gắn huy hiệu.
    =================================================================== */
-.filter-chip.verify-chip.active {
-  background: var(--accent-green);
-  color: #fff;
-  border-color: var(--accent-green);
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.28);
-}
-
-.filter-chip.verify-chip[data-verify="unverified"].active {
-  background: var(--accent-orange);
-  border-color: var(--accent-orange);
-  box-shadow: 0 2px 8px rgba(255, 107, 74, 0.3);
-}
-
 .unverified-flag {
   display: inline-flex;
   align-items: center;
@@ -2384,6 +3071,29 @@ body {
   .sheet-sync-btn.is-syncing {
     animation: none;
     opacity: 0.6;
+  }
+
+  /* Trước đây khối này chỉ tắt đúng một hiệu ứng quay. Người bật "giảm chuyển
+     động" trong hệ điều hành vẫn phải chịu toàn bộ transition, phóng ảnh khi
+     di chuột và cú trượt lên của bottom sheet. */
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .place-card:hover,
+  .portal-cat-card:hover,
+  .filter-chip:hover,
+  .cat-pill:hover,
+  .btn-add-place:hover,
+  .social-chip:hover {
+    transform: none;
+  }
+
+  .place-card:hover .place-img {
+    transform: none;
   }
 }
 

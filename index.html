@@ -28,31 +28,37 @@
     <!-- HERO / PROFILE SECTION (Linkbio Style) -->
     <header class="hero-bio">
       <div class="bio-top-bar">
-        <span class="bio-badge">✨ Cẩm Nang Ẩm Thực Hà Nội</span>
+        <!-- data-icon phải nằm trên một <span> con: hydrateIcons ghi đè
+             innerHTML của chính phần tử mang thuộc tính đó, nên đặt thẳng lên
+             thẻ có sẵn chữ sẽ xoá mất chữ. -->
+        <span class="bio-badge"><span data-icon="sparkle"></span> Cẩm nang ẩm thực Hà Nội</span>
         <div class="header-actions">
-          <button id="btnOpenManager" class="btn-manage-hub" title="Quản lý & Chỉnh sửa danh sách quán" aria-label="Quản lý quán">
-            ⚙️ Quản lý quán
+          <button id="btnAddPlace" class="btn-add-place" title="Thêm một quán mới vào cẩm nang">
+            <span data-icon="plus"></span> Thêm quán
           </button>
-          <button id="btnExportSheets" class="btn-export-csv" title="Xuất dữ liệu ra Google Sheets / Excel (.csv)" aria-label="Xuất Google Sheets">
-            📊 Google Sheets
+          <button id="btnOpenManager" class="btn-manage-hub" title="Sửa hoặc xoá quán trong danh sách" aria-label="Quản lý quán">
+            <span data-icon="edit"></span> Quản lý quán
           </button>
-          <button id="btnSyncSheet" class="icon-btn sheet-sync-btn sheet-off" title="Đồng bộ với Google Sheet" aria-label="Đồng bộ Google Sheet">☁️</button>
-          <button id="btnOpenSettings" class="icon-btn" title="Nguồn dữ liệu tự động" aria-label="Nguồn dữ liệu">🔌</button>
-          <button id="themeToggleBtn" class="icon-btn" title="Đổi giao diện Tối/Sáng" aria-label="Đổi giao diện">🌙</button>
-          <button id="shareGuideBtn" class="icon-btn" title="Chia sẻ trang này" aria-label="Chia sẻ">🔗</button>
+          <button id="btnExportSheets" class="btn-export-csv" title="Tải dữ liệu về dạng .csv mở được bằng Google Sheets hoặc Excel" aria-label="Tải file .csv">
+            <span data-icon="sheet"></span> Tải .csv
+          </button>
+          <button id="btnSyncSheet" class="icon-btn sheet-sync-btn sheet-off" title="Đồng bộ với Google Sheet" aria-label="Đồng bộ Google Sheet" data-icon="cloud"></button>
+          <button id="btnOpenSettings" class="icon-btn" title="Nguồn dữ liệu tự động" aria-label="Nguồn dữ liệu" data-icon="plug"></button>
+          <button id="themeToggleBtn" class="icon-btn" title="Đổi giao diện tối/sáng" aria-label="Đổi giao diện"></button>
+          <button id="shareGuideBtn" class="icon-btn" title="Chia sẻ trang này" aria-label="Chia sẻ" data-icon="share"></button>
         </div>
       </div>
 
       <div class="bio-profile">
         <div class="avatar-wrapper">
           <img id="profileAvatar" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80" alt="Avatar" class="profile-avatar">
-          <span class="verified-dot" title="Tác giả được xác thực">✓</span>
+          <span class="verified-dot" title="Tác giả được xác thực" data-icon="check"></span>
         </div>
         <div class="bio-info">
           <h1 id="profileName" class="bio-name">Hanoi Food & Cafe Guide</h1>
           <span id="profileHandle" class="bio-handle">@foodie_hanoi</span>
           <p id="profileBio" class="bio-desc">
-            Cẩm nang quán ăn & cà phê chọn lọc tại Hà Nội. Đạt chuẩn đánh giá >= 4.0★ và hơn 100+ lượt reviews Google Maps! 🥢☕✨
+            Cẩm nang quán ăn & cà phê chọn lọc tại Hà Nội. Mỗi quán đều từ 4.0 sao và trên 100 lượt đánh giá trên Google Maps.
           </p>
         </div>
       </div>
@@ -67,26 +73,10 @@
       </div>
     </header>
 
-    <!-- VIEW MODE SWITCHER & ACTIONS -->
-    <div class="control-bar">
-      <div class="view-mode-tabs" role="tablist">
-        <button class="view-tab active" data-view="explorer" role="tab" aria-selected="true">
-          🔍 Khám phá quán ăn
-        </button>
-        <button class="view-tab" data-view="list" role="tab" aria-selected="false">
-          ☰ Danh sách nhanh
-        </button>
-        <button class="view-tab" data-view="portal" role="tab" aria-selected="false">
-          📑 Danh mục Google Maps
-        </button>
-      </div>
-
-      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-        <button id="btnAddPlace" class="btn-add-place">
-          <span>+</span> Thêm quán mới
-        </button>
-      </div>
-    </div>
+    <!-- Thanh tab chuyển view ở đây đã được gỡ: nó đổi cùng một trạng thái với
+         cụm nút cạnh số kết quả bên dưới, cách nhau ~400px và gọi cùng một thứ
+         bằng hai tên khác nhau. Giờ chỉ còn một bộ duy nhất, dùng được trên cả
+         máy tính lẫn điện thoại. Nút "Thêm quán" chuyển lên .header-actions. -->
 
     <!-- DẢI BÁO "CÒN THAY ĐỔI CHƯA LÊN SHEET".
          Chỉ hiện khi hàng đợi còn hàng. Phải nằm ở đây chứ không chỉ là huy
@@ -94,70 +84,75 @@
          trên điện thoại, nơi người ta hay thêm quán nhất. -->
     <div id="syncPendingBar" class="sync-pending-bar" style="display: none;" role="status"></div>
 
-    <!-- CATEGORY PILLS (Lọc nhanh danh mục) -->
-    <section class="categories-slider-wrapper">
-      <div class="section-label">
-        <span>Danh mục món ngon</span>
-      </div>
+    <!-- CATEGORY PILLS (Lọc nhanh danh mục).
+         Nhãn "DANH MỤC MÓN NGON" in hoa giãn chữ đã bị gỡ: dãy chip bên dưới tự
+         nói nó là danh mục, và chữ hoa toàn bộ làm tiếng Việt có dấu khó đọc. -->
+    <section class="categories-slider-wrapper" aria-label="Lọc theo danh mục món">
       <div id="categoryPills" class="categories-pills">
         <!-- Render tự động từ data.js -->
       </div>
     </section>
 
-    <!-- SEARCH & ADVANCED FILTERS PANEL (Horizontal Scroll Friendly) -->
+    <!-- SEARCH & ADVANCED FILTERS PANEL -->
     <section class="filters-panel">
       <!-- Search Input -->
       <div class="search-box-row">
-        <span class="search-icon">🔍</span>
-        <input type="text" id="searchInput" class="search-input" placeholder="Tìm tên quán, món ăn, phố xá (Phở Bát Đàn, Cafe trứng, Lò Đúc...)" autocomplete="off">
-        <button id="searchClearBtn" class="search-clear-btn" title="Xóa tìm kiếm">✕</button>
+        <span class="search-icon" data-icon="search"></span>
+        <input type="text" id="searchInput" class="search-input" placeholder="Tìm quán, món hoặc tên phố" autocomplete="off">
+        <button id="searchClearBtn" class="search-clear-btn" title="Xoá ô tìm kiếm" aria-label="Xoá ô tìm kiếm" data-icon="close"></button>
       </div>
 
-      <!-- City Horizontal Scroll Track -->
+      <!-- Các nhãn hàng lọc chỉ hiện trên máy tính; trên điện thoại chúng ngốn
+           ~35% bề ngang và đẩy chip ra ngoài màn hình, nên thành sr-only. -->
       <div class="filter-scroll-wrapper">
-        <div class="filter-scroll-title">🗺️ Thành phố:</div>
-        <div id="cityPills" class="filter-scroll-track">
+        <div class="filter-scroll-title" id="lblCity">Thành phố</div>
+        <div id="cityPills" class="filter-scroll-track" role="group" aria-labelledby="lblCity">
           <!-- Render tự động từ app.js -->
         </div>
       </div>
 
-      <!-- District Horizontal Scroll Track — chỉ hiện khi đã chọn một thành phố -->
+      <!-- Quận — chỉ hiện khi đã chọn một thành phố -->
       <div class="filter-scroll-wrapper" id="districtFilterRow" style="margin-top: 8px;">
-        <div class="filter-scroll-title">📍 Quận:</div>
-        <div id="districtPills" class="filter-scroll-track">
+        <div class="filter-scroll-title" id="lblDistrict">Quận</div>
+        <div id="districtPills" class="filter-scroll-track" role="group" aria-labelledby="lblDistrict">
           <!-- Render tự động từ app.js -->
         </div>
       </div>
 
-      <!-- Price & Sort Quick Filter Horizontal Scroll Track -->
+      <!-- Hợp cho — lọc theo mục đích đi (hẹn hò, làm việc, tụ tập...).
+           Trục lọc này mới là trục chia được dữ liệu: 54/60 quán nằm chung một
+           danh mục "Cà phê & Trà" nên lọc theo danh mục gần như không lọc được
+           gì, trong khi trường `vibe` trải đều (Hẹn hò 28 · Chill 27 · Tụ tập
+           20 · Check-in 19 · Làm việc 14). -->
+      <div class="filter-scroll-wrapper" id="vibeFilterRow" style="margin-top: 8px;">
+        <div class="filter-scroll-title" id="lblVibe">Hợp cho</div>
+        <div id="vibePills" class="filter-scroll-track" role="group" aria-labelledby="lblVibe">
+          <!-- Render tự động từ app.js -->
+        </div>
+      </div>
+
+      <!-- Giá & sắp xếp.
+           Nhóm chip "trạng thái xác minh" đã chuyển vào modal Quản lý quán: đó
+           là công cụ soát dữ liệu của người biên tập, không phải bộ lọc của
+           người đi ăn. Nhờ vậy hàng này ngắn lại đáng kể. -->
       <div class="filter-scroll-wrapper" style="margin-top: 8px;">
-        <div class="filter-scroll-title">⚡ Lọc:</div>
-        <div id="quickFilterPills" class="filter-scroll-track">
-          <!-- Price Chips -->
-          <button class="filter-chip price-chip active" data-price="all">💵 Mọi mức giá</button>
-          <button class="filter-chip price-chip" data-price="low">&lt; 50k</button>
-          <button class="filter-chip price-chip" data-price="mid">50k - 150k</button>
-          <button class="filter-chip price-chip" data-price="high">&gt; 150k</button>
+        <div class="filter-scroll-title" id="lblQuick">Giá và sắp xếp</div>
+        <div id="quickFilterPills" class="filter-scroll-track" role="group" aria-labelledby="lblQuick">
+          <button class="filter-chip price-chip active" data-price="all"><span data-icon="wallet"></span> Mọi mức giá</button>
+          <button class="filter-chip price-chip" data-price="low">Dưới 50k</button>
+          <button class="filter-chip price-chip" data-price="mid">50k – 150k</button>
+          <button class="filter-chip price-chip" data-price="high">Trên 150k</button>
 
           <span class="filter-divider"></span>
 
-          <!-- Sort Chips -->
-          <button class="filter-chip sort-chip active" data-sort="featured">⭐ Đề xuất</button>
-          <button class="filter-chip sort-chip" data-sort="rating">★ Điểm cao</button>
-          <button class="filter-chip sort-chip" data-sort="name">🔤 Tên A-Z</button>
+          <button class="filter-chip sort-chip active" data-sort="featured"><span data-icon="sparkle"></span> Đề xuất</button>
+          <button class="filter-chip sort-chip" data-sort="rating"><span data-icon="star"></span> Điểm cao</button>
+          <button class="filter-chip sort-chip" data-sort="name"><span data-icon="sortAz"></span> Tên A-Z</button>
 
           <span class="filter-divider"></span>
 
-          <!-- Verification Chips -->
-          <button class="filter-chip verify-chip active" data-verify="all">🗂️ Mọi trạng thái</button>
-          <button class="filter-chip verify-chip" data-verify="verified">✅ Đã xác minh</button>
-          <button class="filter-chip verify-chip" data-verify="unverified">⚠️ Chưa xác minh</button>
-
-          <span class="filter-divider"></span>
-
-          <!-- Reset Chip -->
-          <button id="resetFiltersBtn" class="filter-chip reset-chip" title="Đặt lại toàn bộ bộ lọc">
-            🔄 Đặt lại
+          <button id="resetFiltersBtn" class="filter-chip reset-chip" title="Bỏ mọi bộ lọc đang chọn">
+            <span data-icon="reset"></span> Đặt lại
           </button>
         </div>
       </div>
@@ -169,14 +164,18 @@
         Đang tải danh sách quán...
       </div>
 
-      <!-- Đổi kiểu hiển thị. Trên điện thoại đây là chỗ DUY NHẤT để đổi,
-           vì thanh tab phía trên bị ẩn dưới 768px. -->
-      <div class="layout-toggle" role="group" aria-label="Kiểu hiển thị">
-        <button type="button" class="layout-toggle-btn" data-layout="list" aria-pressed="false" title="Danh sách gọn — tra cứu nhanh">
-          ☰ <span class="layout-toggle-text">Danh sách</span>
-        </button>
+      <!-- Bộ chuyển cách xem DUY NHẤT của trang, cho cả máy tính lẫn điện
+           thoại. Trước đây còn một thanh tab nữa ở đầu trang làm đúng việc
+           này, hai bộ cùng sáng một lúc. -->
+      <div class="layout-toggle" role="group" aria-label="Cách xem danh sách">
         <button type="button" class="layout-toggle-btn active" data-layout="explorer" aria-pressed="true" title="Thẻ có ảnh">
-          ▦ <span class="layout-toggle-text">Thẻ</span>
+          <span data-icon="grid"></span> <span class="layout-toggle-text">Thẻ</span>
+        </button>
+        <button type="button" class="layout-toggle-btn" data-layout="list" aria-pressed="false" title="Danh sách gọn, tra cứu nhanh">
+          <span data-icon="list"></span> <span class="layout-toggle-text">Danh sách</span>
+        </button>
+        <button type="button" class="layout-toggle-btn" data-layout="portal" aria-pressed="false" title="Gom theo danh mục món">
+          <span data-icon="layers"></span> <span class="layout-toggle-text">Danh mục</span>
         </button>
       </div>
     </div>
@@ -193,14 +192,15 @@
 
     <!-- FOOTER -->
     <footer class="app-footer">
+      <!-- Bỏ dấu "•" nối giữa các liên kết: khoảng trắng đã đủ tách chúng ra,
+           và chuỗi nối bằng dấu chấm giữa là một nếp quen của giao diện dựng
+           sẵn. Vùng chạm của mỗi liên kết cũng được nới ra cho vừa ngón tay. -->
       <div class="footer-links">
         <a href="javascript:void(0)" onclick="resetFilters()" class="footer-link">Trang chủ</a>
-        <span>•</span>
         <a href="javascript:void(0)" onclick="openAddPlaceModal()" class="footer-link">Đóng góp quán</a>
-        <span>•</span>
         <a href="javascript:void(0)" onclick="exportGoogleSheetsCSV()" class="footer-link">Tải file .csv</a>
       </div>
-      <p>© 2026 Hanoi Food & Cafe Guide. Tuyển tập ẩm thực chất lượng cao tại Thủ đô.</p>
+      <p>© 2026 Hanoi Food &amp; Cafe Guide — quán ăn và cà phê chọn lọc ở Hà Nội.</p>
     </footer>
 
   </div>
@@ -211,7 +211,7 @@
   <div id="placeDetailModal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-card">
       <div class="sheet-drag-handle"></div>
-      <button class="modal-close-btn" title="Đóng">✕</button>
+      <button class="modal-close-btn" title="Đóng" aria-label="Đóng" data-icon="close"></button>
       <div id="placeModalContent">
         <!-- Render chi tiết nội dung quán -->
       </div>
@@ -224,24 +224,25 @@
   <div id="addPlaceModal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-card">
       <div class="sheet-drag-handle"></div>
-      <button class="modal-close-btn" title="Đóng">✕</button>
+      <button class="modal-close-btn" title="Đóng" aria-label="Đóng" data-icon="close"></button>
       <div class="modal-body">
-        <h2 class="modal-title" style="margin-bottom: 14px;">➕ Thêm Quán Ăn / Cafe Mới</h2>
+        <h2 class="modal-title" style="margin-bottom: 14px;">Thêm quán mới</h2>
         <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 18px;">
-          Nhập thông tin quán ăn yêu thích của bạn để đưa vào cẩm nang ẩm thực.
+          Nhập thông tin quán bạn muốn đưa vào cẩm nang.
         </p>
 
         <div class="magic-autofill-box">
           <div class="magic-autofill-header">
-            <span>🪄 Tự động nhận diện từ Google Maps</span>
+            <span data-icon="wand"></span>
+            <span>Tự điền từ Google Maps</span>
           </div>
           <div class="magic-input-group">
-            <textarea id="quickMapsUrlInput" class="magic-input" rows="2" placeholder="Dán link Google Maps (hoặc dán cả đoạn Chia sẻ gồm tên quán + địa chỉ + link)..."></textarea>
+            <textarea id="quickMapsUrlInput" class="magic-input" rows="2" placeholder="Dán link Google Maps vào đây"></textarea>
             <button type="button" id="btnQuickAutoFill" class="btn-magic-autofill">
-              ✨ Quét & Tự điền
+              <span data-icon="sparkle"></span> Quét và tự điền
             </button>
           </div>
-          <p class="magic-tip">💡 Tự điền: <strong>tên quán, địa chỉ, quận, toạ độ, danh mục</strong>. Riêng số sao &amp; lượt đánh giá bạn nhập tay ở ô bên dưới — hệ thống không bịa số.</p>
+          <p class="magic-tip"><span data-icon="bulb"></span> Tự điền được <strong>tên quán, địa chỉ, quận, toạ độ, danh mục</strong>. Số sao và lượt đánh giá bạn nhập tay ở ô bên dưới — hệ thống không bịa số.</p>
           <p class="magic-tip" id="magicKeyHint"></p>
         </div>
 
@@ -260,8 +261,8 @@
               <div class="category-new-row" id="newPlaceCategoryNewRow" style="display: none;">
                 <input type="text" id="newPlaceCategoryNew" class="form-input"
                        placeholder="Ví dụ: Bánh tráng trộn, Quán ốc..." maxlength="40" autocomplete="off">
-                <button type="button" id="newPlaceCategoryNewOk" class="btn-cat-ok" title="Dùng tên món này">✓</button>
-                <button type="button" id="newPlaceCategoryNewCancel" class="btn-cat-cancel" title="Huỷ">✕</button>
+                <button type="button" id="newPlaceCategoryNewOk" class="btn-cat-ok" title="Dùng tên món này" aria-label="Dùng tên món này" data-icon="check"></button>
+                <button type="button" id="newPlaceCategoryNewCancel" class="btn-cat-cancel" title="Huỷ" aria-label="Huỷ" data-icon="close"></button>
               </div>
             </div>
             <div class="form-group">
@@ -284,7 +285,7 @@
 
           <div class="manual-entry-box">
             <div class="manual-entry-head">
-              <span>✍️ Điểm Google Maps — nhập tay</span>
+              <span data-icon="edit"></span><span>Điểm Google Maps — bạn nhập tay</span>
               <a href="javascript:void(0)" id="linkOpenPlaceMaps" class="manual-entry-link" hidden>Mở quán trên Google Maps ↗</a>
             </div>
             <div class="form-row" style="margin-bottom:0">
@@ -346,7 +347,7 @@
             <div class="photo-field">
               <img id="newPlacePhotoPreview" class="photo-preview" alt="" hidden>
               <div class="photo-controls">
-                <button type="button" id="newPlacePhotoBtn" class="btn-photo">📷 Tải ảnh lên</button>
+                <button type="button" id="newPlacePhotoBtn" class="btn-photo"><span data-icon="camera"></span> Tải ảnh lên</button>
                 <input type="file" id="newPlacePhotoFile" accept="image/*" hidden>
                 <p id="newPlacePhotoHint" class="photo-hint">Chụp tại quán rồi tải lên, ảnh vào Drive của bạn.</p>
               </div>
@@ -360,10 +361,10 @@
 
           <label class="verify-checkbox">
             <input type="checkbox" id="newPlaceVerified">
-            <span>✅ Tôi đã đối chiếu thông tin này với Google Maps</span>
+            <span>Tôi đã đối chiếu thông tin này với Google Maps</span>
           </label>
 
-          <button type="submit" class="btn-submit">💾 Lưu & Thêm vào Cẩm Nang</button>
+          <button type="submit" class="btn-submit">Lưu quán vào cẩm nang</button>
         </form>
       </div>
     </div>
@@ -375,10 +376,10 @@
   <div id="shareModal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-card" style="max-width: 440px;">
       <div class="sheet-drag-handle"></div>
-      <button class="modal-close-btn" title="Đóng">✕</button>
+      <button class="modal-close-btn" title="Đóng" aria-label="Đóng" data-icon="close"></button>
       <div class="modal-body" style="text-align: center;">
-        <div style="font-size: 2.4rem; margin-bottom: 8px;">💌</div>
-        <h2 class="modal-title">Chia Sẻ Food Guide</h2>
+        <div class="share-modal-icon" data-icon="share"></div>
+        <h2 class="modal-title">Chia sẻ cẩm nang</h2>
         <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 18px;">
           Gửi danh sách quán ăn yêu thích của bạn cho bạn bè & người thân!
         </p>
@@ -386,7 +387,7 @@
         <div style="display: flex; gap: 8px; margin-bottom: 16px;">
           <input type="text" id="shareUrlInput" class="form-input" readonly>
           <button id="btnCopyShareUrl" class="btn-open-maps" style="white-space: nowrap; padding: 0 16px;">
-            📋 Copy
+            Chép link
           </button>
         </div>
 
@@ -403,27 +404,35 @@
   <div id="placeManagerModal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-card manager-modal-card">
       <div class="sheet-drag-handle"></div>
-      <button class="modal-close-btn" title="Đóng">✕</button>
+      <button class="modal-close-btn" title="Đóng" aria-label="Đóng" data-icon="close"></button>
       <div class="modal-body">
-        <h2 class="modal-title" style="margin-bottom: 6px;">⚙️ Quản Lý & Điều Chỉnh Danh Sách Quán</h2>
+        <h2 class="modal-title" style="margin-bottom: 6px;">Quản lý danh sách quán</h2>
         <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 16px;">
-          Chỉnh sửa thông tin, xóa quán, hoặc xuất dữ liệu tương thích 100% với Google Sheets / Excel.
+          Sửa thông tin, xoá quán, hoặc tải dữ liệu về dạng .csv mở được bằng Google Sheets và Excel.
         </p>
 
         <div class="manager-toolbar">
-          <div style="display: flex; gap: 8px; flex: 1; max-width: 420px;">
-            <input type="text" id="managerSearchInput" class="search-input" style="padding: 8px 14px;" placeholder="Tìm nhanh quán để sửa/xóa...">
+          <div style="display: flex; gap: 8px; flex: 1; max-width: 560px; flex-wrap: wrap;">
+            <input type="text" id="managerSearchInput" class="search-input" style="padding: 8px 14px; min-width: 180px;" placeholder="Tìm quán để sửa hoặc xoá">
             <select id="managerDistrictFilter" class="select-filter">
               <!-- Render tự động -->
+            </select>
+            <!-- Lọc theo trạng thái xác minh chuyển từ panel lọc ngoài trang
+                 vào đây: soát xem quán nào chưa đối chiếu với Google Maps là
+                 việc của người biên tập, không phải của người đi ăn. -->
+            <select id="managerVerifyFilter" class="select-filter" title="Lọc theo trạng thái đối chiếu dữ liệu">
+              <option value="all">Mọi trạng thái</option>
+              <option value="unverified">Chưa xác minh</option>
+              <option value="verified">Đã xác minh</option>
             </select>
           </div>
 
           <div class="manager-actions">
-            <button id="btnManagerExportCsv" class="btn-export-csv" title="Tải file CSV cho Google Sheets">
-              📊 Xuất Google Sheets (.csv)
+            <button id="btnManagerExportCsv" class="btn-export-csv" title="Tải file .csv">
+              <span data-icon="sheet"></span> Tải .csv
             </button>
             <button id="btnManagerAddNew" class="btn-add-place" style="padding: 8px 14px; font-size: 0.84rem;">
-              + Thêm mới
+              <span data-icon="plus"></span> Thêm mới
             </button>
           </div>
         </div>
@@ -454,9 +463,9 @@
   <div id="editPlaceModal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-card">
       <div class="sheet-drag-handle"></div>
-      <button class="modal-close-btn" title="Đóng">✕</button>
+      <button class="modal-close-btn" title="Đóng" aria-label="Đóng" data-icon="close"></button>
       <div class="modal-body">
-        <h2 class="modal-title" style="margin-bottom: 14px;">✏️ Chỉnh Sửa Thông Tin Quán</h2>
+        <h2 class="modal-title" style="margin-bottom: 14px;">Sửa thông tin quán</h2>
 
         <form id="editPlaceForm">
           <input type="hidden" id="editPlaceId">
@@ -473,8 +482,8 @@
               <div class="category-new-row" id="editPlaceCategoryNewRow" style="display: none;">
                 <input type="text" id="editPlaceCategoryNew" class="form-input"
                        placeholder="Ví dụ: Bánh tráng trộn, Quán ốc..." maxlength="40" autocomplete="off">
-                <button type="button" id="editPlaceCategoryNewOk" class="btn-cat-ok" title="Dùng tên món này">✓</button>
-                <button type="button" id="editPlaceCategoryNewCancel" class="btn-cat-cancel" title="Huỷ">✕</button>
+                <button type="button" id="editPlaceCategoryNewOk" class="btn-cat-ok" title="Dùng tên món này" aria-label="Dùng tên món này" data-icon="check"></button>
+                <button type="button" id="editPlaceCategoryNewCancel" class="btn-cat-cancel" title="Huỷ" aria-label="Huỷ" data-icon="close"></button>
               </div>
             </div>
             <div class="form-group">
@@ -545,7 +554,7 @@
             <div class="photo-field">
               <img id="editPlacePhotoPreview" class="photo-preview" alt="" hidden>
               <div class="photo-controls">
-                <button type="button" id="editPlacePhotoBtn" class="btn-photo">📷 Tải ảnh lên</button>
+                <button type="button" id="editPlacePhotoBtn" class="btn-photo"><span data-icon="camera"></span> Tải ảnh lên</button>
                 <input type="file" id="editPlacePhotoFile" accept="image/*" hidden>
                 <p id="editPlacePhotoHint" class="photo-hint">Chụp tại quán rồi tải lên, ảnh vào Drive của bạn.</p>
               </div>
@@ -555,10 +564,10 @@
 
           <label class="verify-checkbox">
             <input type="checkbox" id="editPlaceVerified">
-            <span>✅ Đã đối chiếu thông tin này với Google Maps</span>
+            <span>Đã đối chiếu thông tin này với Google Maps</span>
           </label>
 
-          <button type="submit" class="btn-submit">💾 Lưu Thay Đổi</button>
+          <button type="submit" class="btn-submit">Lưu thay đổi</button>
         </form>
       </div>
     </div>
@@ -570,9 +579,9 @@
   <div id="settingsModal" class="modal-overlay" role="dialog" aria-modal="true">
     <div class="modal-card" style="max-width: 560px;">
       <div class="sheet-drag-handle"></div>
-      <button class="modal-close-btn" title="Đóng">✕</button>
+      <button class="modal-close-btn" title="Đóng" aria-label="Đóng" data-icon="close"></button>
       <div class="modal-body">
-        <h2 class="modal-title" style="margin-bottom: 6px;">⚙️ Nguồn dữ liệu &amp; đồng bộ</h2>
+        <h2 class="modal-title" style="margin-bottom: 6px;">Nguồn dữ liệu và đồng bộ</h2>
         <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 18px;">
           Trang lấy thông tin quán từ đâu, và lưu về đâu.
         </p>
@@ -580,7 +589,7 @@
         <div id="backendStatusBox" class="backend-status">Đang kiểm tra máy chủ…</div>
 
         <div class="settings-source-box">
-          <div class="settings-source-title">🟢 Máy chủ giải mã link — tự điền</div>
+          <div class="settings-source-title"><span data-icon="plug"></span> Máy chủ giải mã link — tự điền</div>
           <p class="settings-source-desc">
             Lấy được <strong>tên quán và toạ độ</strong> từ link, kể cả link rút gọn
             <code>maps.app.goo.gl</code> mà trình duyệt không tự đọc được.
@@ -596,15 +605,15 @@
           </div>
 
           <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-            <button type="button" id="btnTestBackend" class="btn-open-maps" style="padding: 9px 14px;">🧪 Kiểm tra kết nối</button>
-            <button type="button" id="btnSaveSettings" class="btn-add-place" style="padding: 9px 16px;">💾 Lưu cài đặt</button>
+            <button type="button" id="btnTestBackend" class="btn-open-maps" style="padding: 9px 14px;">Kiểm tra kết nối</button>
+            <button type="button" id="btnSaveSettings" class="btn-add-place" style="padding: 9px 16px;">Lưu cài đặt</button>
           </div>
 
           <div id="settingsTestResult" class="settings-test-result"></div>
         </div>
 
         <div class="settings-source-box settings-sheet">
-          <div class="settings-source-title">☁️ Google Sheet — sổ cái của bạn</div>
+          <div class="settings-source-title"><span data-icon="cloud"></span> Google Sheet — sổ cái của bạn</div>
           <p class="settings-source-desc">
             Mỗi lần bạn <strong>thêm, sửa, xoá</strong> một quán, thay đổi được ghi thẳng lên
             Google Sheet cá nhân. Xoá cache trình duyệt hay đổi máy vẫn còn dữ liệu — và bạn
@@ -614,8 +623,8 @@
           <div id="sheetStatusBox" class="backend-status">Đang kiểm tra kết nối Sheet…</div>
 
           <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
-            <button type="button" id="btnSheetPush" class="btn-open-maps" style="padding: 9px 14px;">⬆️ Đẩy toàn bộ lên Sheet</button>
-            <button type="button" id="btnSheetPull" class="btn-open-maps" style="padding: 9px 14px;">📥 Lấy từ Sheet về</button>
+            <button type="button" id="btnSheetPush" class="btn-open-maps" style="padding: 9px 14px;"><span data-icon="upload"></span> Đẩy toàn bộ lên Sheet</button>
+            <button type="button" id="btnSheetPull" class="btn-open-maps" style="padding: 9px 14px;"><span data-icon="cloud"></span> Lấy từ Sheet về</button>
           </div>
 
           <details class="settings-help" style="margin-top: 14px;">
@@ -642,7 +651,7 @@
         </div>
 
         <div class="settings-source-box">
-          <div class="settings-source-title">🟢 OpenStreetMap — tự điền, luôn bật</div>
+          <div class="settings-source-title"><span data-icon="map"></span> OpenStreetMap — tự điền, luôn bật</div>
           <p class="settings-source-desc">
             Từ toạ độ tra ra <strong>địa chỉ đường phố và quận</strong>. Miễn phí, không cần khoá,
             không giới hạn lãnh thổ.
@@ -650,7 +659,7 @@
         </div>
 
         <div class="settings-source-box settings-manual">
-          <div class="settings-source-title">✍️ Số sao &amp; lượt đánh giá — bạn nhập tay</div>
+          <div class="settings-source-title"><span data-icon="star"></span> Số sao và lượt đánh giá — bạn nhập tay</div>
           <p class="settings-source-desc">
             Hai ô này không tự điền được. Khi thêm quán, bạn nhìn con số trên Google Maps rồi gõ vào —
             mẹo nhanh: gõ thẳng <code>4,6 (228)</code> vào ô điểm, hệ thống tự tách thành hai ô.
@@ -687,38 +696,78 @@
   <!-- ===================================================================
        MOBILE BOTTOM NAVIGATION BAR (Dành riêng cho thiết bị di động)
        =================================================================== -->
-  <nav id="mobileBottomNav" class="mobile-bottom-nav" aria-label="Mobile Navigation">
+  <nav id="mobileBottomNav" class="mobile-bottom-nav" aria-label="Điều hướng chính">
     <div class="mobile-nav-items">
       <button class="mobile-nav-btn active" data-nav-view="browse">
-        <span class="nav-icon">🔍</span>
+        <span class="nav-icon" data-icon="search"></span>
         <span>Khám phá</span>
       </button>
 
       <button class="mobile-nav-btn" data-nav-view="portal">
-        <span class="nav-icon">📑</span>
+        <span class="nav-icon" data-icon="layers"></span>
         <span>Danh mục</span>
       </button>
 
       <button id="btnMobileAddPlace" class="mobile-nav-add-btn" title="Thêm quán mới" aria-label="Thêm quán">
-        <span>+</span>
+        <span data-icon="plus"></span>
       </button>
 
       <button id="btnMobileManager" class="mobile-nav-btn">
-        <span class="nav-icon">⚙️</span>
+        <span class="nav-icon" data-icon="edit"></span>
         <span>Quản lý</span>
       </button>
 
-      <button id="btnMobileTheme" class="mobile-nav-btn">
-        <span id="mobileThemeIcon" class="nav-icon">🌙</span>
-        <span>Giao diện</span>
+      <!-- Ô thứ năm trước đây là nút đổi Sáng/Tối — một thiết lập dùng vài lần
+           trong đời giữ nguyên một ô, trong khi Đồng bộ, Nguồn dữ liệu, Chia
+           sẻ và Tải .csv thì không có đường nào chạm tới trên điện thoại
+           (.header-actions bị ẩn hẳn dưới 768px). Giờ ô này mở bảng chứa cả
+           năm thứ đó. -->
+      <button id="btnMobileMore" class="mobile-nav-btn" aria-haspopup="dialog" aria-expanded="false">
+        <span class="nav-icon" data-icon="sliders"></span>
+        <span class="nav-dot" aria-hidden="true"></span>
+        <span>Thêm</span>
       </button>
     </div>
   </nav>
+
+  <!-- BẢNG "THÊM" — trả lại các chức năng vốn chỉ có trên máy tính -->
+  <div id="moreSheet" class="more-sheet" role="dialog" aria-modal="true" aria-label="Thêm tuỳ chọn">
+    <div class="more-sheet-card">
+      <div class="more-sheet-grip"></div>
+
+      <button type="button" class="more-sheet-item" id="moreSyncSheet">
+        <span data-icon="cloud"></span>
+        <span>Đồng bộ Google Sheet</span>
+        <span class="more-sheet-note" id="moreSyncNote"></span>
+      </button>
+
+      <button type="button" class="more-sheet-item" id="moreSettings">
+        <span data-icon="plug"></span>
+        <span>Nguồn dữ liệu</span>
+      </button>
+
+      <button type="button" class="more-sheet-item" id="moreExport">
+        <span data-icon="sheet"></span>
+        <span>Tải file .csv</span>
+      </button>
+
+      <button type="button" class="more-sheet-item" id="moreShare">
+        <span data-icon="share"></span>
+        <span>Chia sẻ cẩm nang</span>
+      </button>
+
+      <button type="button" class="more-sheet-item" id="moreTheme">
+        <span id="moreThemeIcon" data-icon="moon"></span>
+        <span id="moreThemeLabel">Chuyển sang giao diện tối</span>
+      </button>
+    </div>
+  </div>
 
   <!-- TOAST NOTIFICATION CONTAINER -->
   <div id="toastContainer" class="toast-container"></div>
 
   <!-- SCRIPTS -->
+  <script src="js/icons.js"></script>
   <script src="js/data.js"></script>
   <script src="js/app.js"></script>
 </body>

@@ -14,6 +14,9 @@ const state = {
   selectedDistrict: "Tất cả quận",
   selectedPriceLevel: "all",
   selectedVerification: "all",
+  // Mục đích đi quán (trường `vibe`) — trục lọc chia được dữ liệu, khác với
+  // danh mục món vốn dồn 54/60 quán vào một nhóm. Xem chú thích ở renderVibePills.
+  selectedVibe: "Tất cả",
   sortBy: "featured",
   // 'explorer' (thẻ có ảnh) · 'list' (danh sách gọn, tra cứu nhanh) · 'portal' (danh mục bio)
   viewMode: "explorer",
@@ -256,6 +259,9 @@ const DATA_SOURCE_LABELS = {
 document.addEventListener("DOMContentLoaded", () => {
   initData();
   cacheDOMElements();
+  // Đổ biểu tượng vào các phần tử [data-icon] viết sẵn trong index.html.
+  // Phải chạy trước initTheme vì nút đổi giao diện tự vẽ lại biểu tượng của nó.
+  hydrateIcons();
   initTheme();
   setupEventListeners();
   updateCategoryCounts();
@@ -327,7 +333,7 @@ function savePlaces() {
     localStorage.setItem(STORAGE_KEY_DELETED, JSON.stringify([...state.deletedIds]));
   } catch (e) {
     console.error("Lưu thất bại:", e);
-    showToast("⚠️ Không lưu được dữ liệu — bộ nhớ trình duyệt đã đầy.");
+    showToast("Không lưu được dữ liệu — bộ nhớ trình duyệt đã đầy.");
   }
 }
 
@@ -361,12 +367,13 @@ function cacheDOMElements() {
   elements.cityPills = document.getElementById("cityPills");
   elements.districtFilterRow = document.getElementById("districtFilterRow");
   elements.districtPills = document.getElementById("districtPills");
+  elements.vibeFilterRow = document.getElementById("vibeFilterRow");
+  elements.vibePills = document.getElementById("vibePills");
   elements.priceChips = document.querySelectorAll(".price-chip");
   elements.sortChips = document.querySelectorAll(".sort-chip");
-  elements.verifyChips = document.querySelectorAll(".verify-chip");
   elements.resetFiltersBtn = document.getElementById("resetFiltersBtn");
 
-  elements.viewTabs = document.querySelectorAll(".view-tab");
+  // .view-tab đã bị gỡ khỏi index.html cùng thanh tab trùng chức năng
   elements.layoutToggleButtons = document.querySelectorAll(".layout-toggle-btn[data-layout]");
   elements.themeToggleBtn = document.getElementById("themeToggleBtn");
   elements.shareGuideBtn = document.getElementById("shareGuideBtn");
@@ -399,6 +406,7 @@ function cacheDOMElements() {
   elements.managerTableBody = document.getElementById("managerTableBody");
   elements.managerSearchInput = document.getElementById("managerSearchInput");
   elements.managerDistrictFilter = document.getElementById("managerDistrictFilter");
+  elements.managerVerifyFilter = document.getElementById("managerVerifyFilter");
   elements.btnManagerExportCsv = document.getElementById("btnManagerExportCsv");
   elements.btnManagerAddNew = document.getElementById("btnManagerAddNew");
 
@@ -423,8 +431,18 @@ function cacheDOMElements() {
   elements.mobileNavButtons = document.querySelectorAll(".mobile-nav-btn[data-nav-view]");
   elements.btnMobileAddPlace = document.getElementById("btnMobileAddPlace");
   elements.btnMobileManager = document.getElementById("btnMobileManager");
-  elements.btnMobileTheme = document.getElementById("btnMobileTheme");
-  elements.mobileThemeIcon = document.getElementById("mobileThemeIcon");
+
+  // Bảng "Thêm" — chứa những nút vốn chỉ có trên máy tính
+  elements.btnMobileMore = document.getElementById("btnMobileMore");
+  elements.moreSheet = document.getElementById("moreSheet");
+  elements.moreSyncSheet = document.getElementById("moreSyncSheet");
+  elements.moreSyncNote = document.getElementById("moreSyncNote");
+  elements.moreSettings = document.getElementById("moreSettings");
+  elements.moreExport = document.getElementById("moreExport");
+  elements.moreShare = document.getElementById("moreShare");
+  elements.moreTheme = document.getElementById("moreTheme");
+  elements.moreThemeIcon = document.getElementById("moreThemeIcon");
+  elements.moreThemeLabel = document.getElementById("moreThemeLabel");
 }
 
 /**
@@ -442,16 +460,69 @@ function toggleTheme() {
   document.documentElement.setAttribute("data-theme", state.theme);
   localStorage.setItem(STORAGE_KEY_THEME, state.theme);
   updateThemeIcon();
-  showToast(state.theme === "dark" ? "🌙 Đã chuyển sang chế độ Tối" : "☀️ Đã chuyển sang chế độ Sáng");
+  showToast(state.theme === "dark" ? "Đã chuyển sang giao diện tối" : "Đã chuyển sang giao diện sáng");
 }
 
 function updateThemeIcon() {
+  const toDark = state.theme !== "dark";
+  const name = toDark ? "moon" : "sun";
+  const label = toDark ? "Chuyển sang giao diện tối" : "Chuyển sang giao diện sáng";
+
   if (elements.themeToggleBtn) {
-    elements.themeToggleBtn.innerHTML = state.theme === "dark" ? "☀️" : "🌙";
-    elements.themeToggleBtn.setAttribute("title", state.theme === "dark" ? "Chuyển sang giao diện Sáng" : "Chuyển sang giao diện Tối");
+    elements.themeToggleBtn.innerHTML = icon(name);
+    elements.themeToggleBtn.setAttribute("title", label);
+    elements.themeToggleBtn.setAttribute("aria-label", label);
   }
-  if (elements.mobileThemeIcon) {
-    elements.mobileThemeIcon.innerHTML = state.theme === "dark" ? "☀️" : "🌙";
+  // Nút đổi giao diện trên điện thoại nằm trong bảng "Thêm" chứ không còn
+  // chiếm một ô trên thanh nav dưới.
+  if (elements.moreThemeIcon) elements.moreThemeIcon.innerHTML = icon(name);
+  if (elements.moreThemeLabel) elements.moreThemeLabel.textContent = label;
+}
+
+/* ===================================================================
+   BẢNG "THÊM" TRÊN ĐIỆN THOẠI
+   =================================================================== */
+function openMoreSheet() {
+  if (!elements.moreSheet) return;
+  updateMoreSheetStatus();
+  elements.moreSheet.classList.add("active");
+  if (elements.btnMobileMore) elements.btnMobileMore.setAttribute("aria-expanded", "true");
+}
+
+function closeMoreSheet() {
+  if (!elements.moreSheet) return;
+  elements.moreSheet.classList.remove("active");
+  if (elements.btnMobileMore) elements.btnMobileMore.setAttribute("aria-expanded", "false");
+}
+
+/**
+ * Ghi trạng thái đồng bộ vào bảng "Thêm", và chấm báo lên nút mở bảng.
+ *
+ * Nút ☁️ trên máy tính vừa là nút bấm vừa là đèn báo; trên điện thoại nút đó
+ * không tồn tại, nên trạng thái phải hiện ở đây — kèm một chấm cam trên thanh
+ * nav để biết còn thay đổi chưa đẩy lên mà không cần mở bảng ra xem.
+ */
+function updateMoreSheetStatus() {
+  const pending = pendingSheetCount();
+
+  if (elements.moreSyncNote) {
+    if (pending > 0) {
+      elements.moreSyncNote.textContent = `${pending} thay đổi chờ`;
+      elements.moreSyncNote.className = "more-sheet-note is-warn";
+    } else if (state.sheetStatus.online) {
+      elements.moreSyncNote.textContent = "Đã đồng bộ";
+      elements.moreSyncNote.className = "more-sheet-note is-ok";
+    } else if (!state.sheetStatus.configured) {
+      elements.moreSyncNote.textContent = "Chưa cài đặt";
+      elements.moreSyncNote.className = "more-sheet-note";
+    } else {
+      elements.moreSyncNote.textContent = "";
+      elements.moreSyncNote.className = "more-sheet-note";
+    }
+  }
+
+  if (elements.btnMobileMore) {
+    elements.btnMobileMore.classList.toggle("has-pending", pending > 0);
   }
 }
 
@@ -514,30 +585,23 @@ function setupEventListeners() {
     });
   });
 
-  // Lọc theo trạng thái xác minh
-  document.querySelectorAll(".verify-chip").forEach(chip => {
-    chip.addEventListener("click", () => {
-      state.selectedVerification = chip.dataset.verify;
-      document.querySelectorAll(".verify-chip").forEach(c => {
-        c.classList.toggle("active", c.dataset.verify === state.selectedVerification);
-      });
+  // Lọc theo trạng thái xác minh — giờ là ô chọn trong modal Quản lý quán.
+  // Đây là công cụ soát dữ liệu của người biên tập chứ không phải bộ lọc của
+  // người đi ăn, nên nó thuộc về bảng quản lý, không thuộc panel lọc.
+  if (elements.managerVerifyFilter) {
+    elements.managerVerifyFilter.addEventListener("change", () => {
+      state.selectedVerification = elements.managerVerifyFilter.value;
+      renderManagerTable();
       renderPlaces();
     });
-  });
+  }
 
   // Đặt lại bộ lọc
   if (elements.resetFiltersBtn) {
     elements.resetFiltersBtn.addEventListener("click", resetFilters);
   }
 
-  // Chuyển chế độ xem (View Mode Tabs Desktop)
-  elements.viewTabs.forEach(tab => {
-    tab.addEventListener("click", () => {
-      setViewMode(tab.dataset.view);
-    });
-  });
-
-  // Nút chuyển Thẻ ⇄ Danh sách cạnh số kết quả
+  // Bộ chuyển cách xem DUY NHẤT (Thẻ · Danh sách · Danh mục), cạnh số kết quả
   if (elements.layoutToggleButtons) {
     elements.layoutToggleButtons.forEach(btn => {
       btn.addEventListener("click", () => setViewMode(btn.dataset.layout));
@@ -569,8 +633,48 @@ function setupEventListeners() {
     elements.btnMobileManager.addEventListener("click", openPlaceManagerModal);
   }
 
-  if (elements.btnMobileTheme) {
-    elements.btnMobileTheme.addEventListener("click", toggleTheme);
+  /* Bảng "Thêm" trên điện thoại.
+     .header-actions bị ẩn hẳn dưới 768px mà thanh nav dưới không có chỗ, nên
+     trước đây Đồng bộ Google Sheet, Nguồn dữ liệu, Chia sẻ và Tải .csv không
+     có đường nào chạm tới trên điện thoại — đúng nơi người ta hay thêm quán
+     nhất. Bảng này trả lại cả bốn, cộng nút đổi giao diện. */
+  if (elements.btnMobileMore) {
+    elements.btnMobileMore.addEventListener("click", openMoreSheet);
+  }
+  if (elements.moreSheet) {
+    elements.moreSheet.addEventListener("click", (e) => {
+      if (e.target === elements.moreSheet) closeMoreSheet();
+    });
+  }
+  if (elements.moreSyncSheet) {
+    elements.moreSyncSheet.addEventListener("click", () => {
+      closeMoreSheet();
+      syncWithSheet();
+    });
+  }
+  if (elements.moreSettings) {
+    elements.moreSettings.addEventListener("click", () => {
+      closeMoreSheet();
+      openSettingsModal();
+    });
+  }
+  if (elements.moreExport) {
+    elements.moreExport.addEventListener("click", () => {
+      closeMoreSheet();
+      exportGoogleSheetsCSV();
+    });
+  }
+  if (elements.moreShare) {
+    elements.moreShare.addEventListener("click", () => {
+      closeMoreSheet();
+      openShareModal();
+    });
+  }
+  if (elements.moreTheme) {
+    elements.moreTheme.addEventListener("click", () => {
+      toggleTheme();
+      closeMoreSheet();
+    });
   }
 
   // Nút theme & share Desktop
@@ -710,6 +814,7 @@ function resetFilters() {
   state.selectedDistrict = "Tất cả quận";
   state.selectedPriceLevel = "all";
   state.selectedVerification = "all";
+  state.selectedVibe = ALL_VIBES;
   state.sortBy = "featured";
   state.currentCategory = "all";
 
@@ -718,6 +823,7 @@ function resetFilters() {
 
   renderCityPills();
   renderDistrictsPills();
+  renderVibePills();
 
   // Reset active classes on District Chips
   if (elements.districtPills) {
@@ -736,14 +842,12 @@ function resetFilters() {
     s.classList.toggle("active", s.dataset.sort === "featured");
   });
 
-  // Reset Verify Chips
-  document.querySelectorAll(".verify-chip").forEach(v => {
-    v.classList.toggle("active", v.dataset.verify === "all");
-  });
+  // Ô lọc trạng thái xác minh nằm trong modal Quản lý quán
+  if (elements.managerVerifyFilter) elements.managerVerifyFilter.value = "all";
 
   renderCategoryPills();
   renderPlaces();
-  showToast("🔄 Đã đặt lại tất cả bộ lọc");
+  showToast("Đã bỏ mọi bộ lọc");
 }
 
 /**
@@ -753,6 +857,7 @@ function renderAll() {
   renderProfile();
   renderCityPills();
   renderDistrictsPills();
+  renderVibePills();
   renderCategoryPills();
   // setViewMode chứ không phải renderViewMode: lần vẽ đầu còn phải bật sáng
   // đúng tab / nút chuyển kiểu, vì kiểu mặc định tuỳ theo máy đang dùng.
@@ -770,22 +875,30 @@ function renderProfile() {
 
   if (elements.profileStats) {
     const verifiedCount = state.places.filter(p => p.verified).length;
-    elements.profileStats.innerHTML = `
-      <div class="stat-item">📍 <strong>${state.places.length}</strong> địa điểm</div>
-      <div class="stat-item">✅ <strong>${verifiedCount}</strong> đã xác minh</div>
-      <div class="stat-item">🏷️ <strong>${state.categories.length - 1}</strong> danh mục</div>
-      <div class="stat-item">🏙️ <strong>Hà Nội</strong></div>
+    const catCount = state.categories.filter(c => c.id !== "all" && c.count > 0).length;
+
+    /* Bỏ ô "0 đã xác minh" khi chưa đối chiếu quán nào: một con số 0 đưa lên
+       hàng thống kê chính thì chỉ nói được rằng chưa ai làm gì. Khi đã có quán
+       được đối chiếu thì nó trở lại và lúc đó mới đáng khoe. */
+    let html = `
+      <div class="stat-item">${icon("pin", "icon-sm")} <strong>${state.places.length}</strong> địa điểm</div>
+      <div class="stat-item">${icon("tag", "icon-sm")} <strong>${catCount}</strong> danh mục</div>
+      <div class="stat-item">${icon("building", "icon-sm")} <strong>Hà Nội</strong></div>
     `;
+    if (verifiedCount > 0) {
+      html = `<div class="stat-item">${icon("check", "icon-sm")} <strong>${verifiedCount}</strong> đã xác minh</div>` + html;
+    }
+    elements.profileStats.innerHTML = html;
   }
 
   if (elements.socialLinksContainer && state.profile.socials) {
     const socials = state.profile.socials;
-    let html = "";
-    if (socials.facebook) html += `<a href="${escapeHtml(socials.facebook)}" target="_blank" rel="noopener" class="social-chip">📘 Facebook</a>`;
-    if (socials.instagram) html += `<a href="${escapeHtml(socials.instagram)}" target="_blank" rel="noopener" class="social-chip">📸 Instagram</a>`;
-    if (socials.tiktok) html += `<a href="${escapeHtml(socials.tiktok)}" target="_blank" rel="noopener" class="social-chip">🎵 TikTok</a>`;
-    if (socials.threads) html += `<a href="${escapeHtml(socials.threads)}" target="_blank" rel="noopener" class="social-chip">🧵 Threads</a>`;
-    elements.socialLinksContainer.innerHTML = html;
+    const chip = (key, label) => socials[key]
+      ? `<a href="${escapeHtml(socials[key])}" target="_blank" rel="noopener" class="social-chip">${socialIcon(key)} ${label}</a>`
+      : "";
+    elements.socialLinksContainer.innerHTML =
+      chip("facebook", "Facebook") + chip("instagram", "Instagram") +
+      chip("tiktok", "TikTok") + chip("threads", "Threads");
   }
 }
 
@@ -850,13 +963,13 @@ function renderCityPills() {
 
   let html = `
     <button class="filter-chip city-chip ${state.selectedCity === ALL_CITIES ? "active" : ""}"
-            data-city="${escapeHtml(ALL_CITIES)}">🗺️ ${escapeHtml(ALL_CITIES)}</button>
+            data-city="${escapeHtml(ALL_CITIES)}">${icon("map")} ${escapeHtml(ALL_CITIES)}</button>
   `;
   CITIES.forEach(c => {
     const isActive = state.selectedCity === c.id ? "active" : "";
     html += `
       <button class="filter-chip city-chip ${isActive}" data-city="${escapeHtml(c.id)}">
-        ${c.icon} ${escapeHtml(c.name)} (${dem[c.id] || 0})
+        ${icon("building")} ${escapeHtml(c.name)} (${dem[c.id] || 0})
       </button>
     `;
   });
@@ -896,10 +1009,9 @@ function renderDistrictsPills() {
   let html = "";
   ["Tất cả quận"].concat(city.districts).forEach(d => {
     const isActive = state.selectedDistrict === d ? "active" : "";
-    const icon = d === "Tất cả quận" ? "📍" : "🏙️";
     html += `
       <button class="filter-chip district-chip ${isActive}" data-district="${escapeHtml(d)}">
-        ${icon} ${escapeHtml(d)}
+        ${icon(d === "Tất cả quận" ? "map" : "pin")} ${escapeHtml(d)}
       </button>
     `;
   });
@@ -924,17 +1036,23 @@ function renderCategoryPills() {
   if (!elements.categoryPills) return;
   updateCategoryCounts();
 
+  /* Danh mục chưa có quán nào không hiện ở hàng lọc: bấm vào chỉ ra một danh
+     sách rỗng. Chúng quay lại ngay khi có quán đầu tiên, và vẫn thấy được ở
+     trang Danh mục. Danh mục đang chọn thì luôn giữ, kể cả khi vừa xoá hết
+     quán của nó — nếu không, chip đang sáng biến mất dưới tay người dùng. */
   let html = "";
-  state.categories.forEach(cat => {
-    const isActive = state.currentCategory === cat.id ? "active" : "";
-    html += `
-      <button class="cat-pill ${isActive}" data-cat-id="${escapeHtml(cat.id)}">
-        <span class="cat-icon">${escapeHtml(cat.icon)}</span>
-        <span class="cat-name">${escapeHtml(cat.name)}</span>
-        <span class="cat-count">${cat.count}</span>
-      </button>
-    `;
-  });
+  state.categories
+    .filter(cat => cat.id === "all" || cat.count > 0 || cat.id === state.currentCategory)
+    .forEach(cat => {
+      const isActive = state.currentCategory === cat.id ? "active" : "";
+      html += `
+        <button class="cat-pill ${isActive}" data-cat-id="${escapeHtml(cat.id)}">
+          <span class="cat-icon">${categoryIcon(cat.id)}</span>
+          <span class="cat-name">${escapeHtml(cat.name)}</span>
+          <span class="cat-count">${cat.count}</span>
+        </button>
+      `;
+    });
 
   elements.categoryPills.innerHTML = html;
 
@@ -954,6 +1072,95 @@ function renderCategoryPills() {
   });
 }
 
+/* ===================================================================
+   BỘ LỌC "HỢP CHO" (theo trường vibe)
+   -------------------------------------------------------------------
+   Vì sao thêm trục lọc này: 54 trong 60 quán nằm chung danh mục "Cà
+   phê & Trà", hai danh mục khác rỗng hẳn — nên lọc theo danh mục gần
+   như không chia được gì. Trường `vibe` vốn đã có sẵn trong dữ liệu
+   lại trải khá đều và đúng với cách người ta thật sự chọn quán:
+   Hẹn hò 28 · Chill 27 · Tụ tập bạn bè 20 · Check-in 19 · Làm việc 14.
+
+   Panel lọc không dài thêm: nhóm chip "trạng thái xác minh" đã dời vào
+   modal Quản lý quán, nhường đúng chỗ cho hàng này.
+   =================================================================== */
+
+/** Giá trị "không lọc theo mục đích nào" */
+const ALL_VIBES = "Tất cả";
+
+/** Chỉ hiện những mục đích đủ phổ biến để lọc ra kết quả có nghĩa */
+const VIBE_MIN_COUNT = 4;
+
+/** Biểu tượng cho vài mục đích hay gặp; còn lại dùng hình chung */
+const VIBE_ICONS = {
+  "Hẹn hò": "heart",
+  "Chill": "coffee",
+  "Tụ tập bạn bè": "users",
+  "Check-in": "camera",
+  "Làm việc": "laptop",
+  "Yên tĩnh": "moon",
+  "Học tập": "note",
+  "Gia đình": "users",
+  "Truyền thống": "building",
+  "Khách du lịch": "map",
+  "Sang trọng": "sparkle"
+};
+
+/** Đếm số quán theo từng mục đích, chỉ giữ những mục đủ nhiều */
+function topVibes() {
+  const tally = {};
+  state.places.forEach(p => {
+    (p.vibe || []).forEach(v => {
+      const key = String(v).trim();
+      if (key) tally[key] = (tally[key] || 0) + 1;
+    });
+  });
+
+  return Object.keys(tally)
+    .filter(v => tally[v] >= VIBE_MIN_COUNT || v === state.selectedVibe)
+    .sort((a, b) => tally[b] - tally[a])
+    .slice(0, 8)
+    .map(v => ({ name: v, count: tally[v] || 0 }));
+}
+
+function renderVibePills() {
+  if (!elements.vibePills) return;
+
+  const vibes = topVibes();
+
+  // Dữ liệu chưa có trường vibe thì giấu hẳn hàng này đi, chứ không để một
+  // hàng lọc trống nằm chiếm chỗ.
+  if (elements.vibeFilterRow) {
+    elements.vibeFilterRow.style.display = vibes.length ? "" : "none";
+  }
+  if (!vibes.length) {
+    elements.vibePills.innerHTML = "";
+    return;
+  }
+
+  let html = `
+    <button class="filter-chip vibe-chip ${state.selectedVibe === ALL_VIBES ? "active" : ""}"
+            data-vibe="${escapeHtml(ALL_VIBES)}">${icon("sliders")} Mọi mục đích</button>
+  `;
+  vibes.forEach(v => {
+    const isActive = state.selectedVibe === v.name ? "active" : "";
+    html += `
+      <button class="filter-chip vibe-chip ${isActive}" data-vibe="${escapeHtml(v.name)}">
+        ${icon(VIBE_ICONS[v.name] || "tag")} ${escapeHtml(v.name)} (${v.count})
+      </button>
+    `;
+  });
+  elements.vibePills.innerHTML = html;
+
+  elements.vibePills.querySelectorAll(".vibe-chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      state.selectedVibe = chip.dataset.vibe;
+      renderVibePills();
+      renderPlaces();
+    });
+  });
+}
+
 /**
  * Thiết lập và hiển thị theo View Mode (Explorer / Portal)
  */
@@ -963,18 +1170,9 @@ function setViewMode(mode) {
   localStorage.setItem(STORAGE_KEY_VIEW, state.viewMode);
   localStorage.setItem(STORAGE_KEY_BROWSE, state.browseMode);
 
-  // Đồng bộ Desktop Tabs
-  if (elements.viewTabs) {
-    elements.viewTabs.forEach(t => {
-      const isActive = t.dataset.view === state.viewMode;
-      t.classList.toggle("active", isActive);
-      t.setAttribute("aria-selected", String(isActive));
-    });
-  }
-
-  // Đồng bộ nút chuyển Thẻ ⇄ Danh sách nằm cạnh số kết quả. Nút này là đường
-  // duy nhất để đổi kiểu hiển thị trên điện thoại, vì .control-bar (chỗ chứa
-  // tab của máy tính) bị ẩn hẳn dưới 768px.
+  // Bộ chuyển cách xem DUY NHẤT của trang (Thẻ · Danh sách · Danh mục), dùng
+  // chung cho máy tính và điện thoại. Thanh tab trùng chức năng ở đầu trang
+  // đã bị gỡ — xem chú thích ở .layout-toggle trong style.css.
   if (elements.layoutToggleButtons) {
     elements.layoutToggleButtons.forEach(btn => {
       const isActive = btn.dataset.layout === state.viewMode;
@@ -1005,10 +1203,24 @@ function renderViewMode() {
 
   elements.portalContainer.style.display = isPortal ? "block" : "none";
   if (filtersPanel) filtersPanel.style.display = isPortal ? "none" : "block";
-  if (resultsHeader) resultsHeader.style.display = isPortal ? "none" : "flex";
+
+  // Ở chế độ Danh mục, dãy chip danh mục phía trên lặp lại đúng những danh mục
+  // mà lưới bên dưới đang bày ra — cùng một taxonomy hiện hai lần, chồng lên
+  // nhau. Giấu dãy chip đi khi đang xem lưới.
+  const categoryRow = document.querySelector(".categories-slider-wrapper");
+  if (categoryRow) categoryRow.style.display = isPortal ? "none" : "";
+
+  // .results-header giờ phải hiện cả ở chế độ Danh mục: nó chứa bộ chuyển cách
+  // xem duy nhất của trang, giấu nó đi thì không có đường quay ra.
+  if (resultsHeader) resultsHeader.style.display = "flex";
 
   if (isPortal) {
     document.body.classList.remove("mode-list");
+    if (elements.resultsCount) {
+      const filled = state.categories.filter(c => c.id !== "all" && c.count > 0).length;
+      elements.resultsCount.innerHTML =
+        `<strong>${filled}</strong> danh mục có quán`;
+    }
     elements.placesContainer.style.display = "none";
     renderPortalView();
     return;
@@ -1031,50 +1243,74 @@ function renderViewMode() {
 function renderPortalView() {
   if (!elements.portalContainer) return;
 
-  // Danh mục có quán xếp trước, danh mục rỗng làm mờ ở cuối
-  const validCategories = state.categories
+  const withCounts = state.categories
     .filter(c => c.id !== "all")
     .map(c => ({ ...c, places: state.places.filter(p => p.category === c.id) }))
     .sort((x, y) => y.places.length - x.places.length);
 
+  /* Danh mục chưa có quán nào không còn chiếm trọn một thẻ. Trước đây hai danh
+     mục rỗng vẫn hiện thẻ đầy đủ với nút "Chưa có quán" bị vô hiệu — bên cạnh
+     một nút "Mở trên Google Maps" thì VẪN bật. Một ô trống không đáng bằng một
+     ô có 54 quán, mà lưới lại cho chúng đúng một cỡ.
+
+     Chúng gom thành một dòng mời thêm quán ở cuối trang — vẫn thấy được là có
+     những danh mục đang trống, nhưng không chen vào chỗ của nội dung thật. */
+  const filled = withCounts.filter(c => c.places.length > 0);
+  const empty = withCounts.filter(c => c.places.length === 0);
+
   let html = `<div class="portal-categories-grid">`;
 
-  validCategories.forEach(cat => {
+  filled.forEach(cat => {
     const count = cat.places.length;
-    const isEmpty = count === 0;
     const mapsLink = cat.mapsUrl || `https://www.google.com/maps/search/${encodeURIComponent(cat.name + " Hà Nội")}`;
 
     html += `
-      <div class="portal-cat-card${isEmpty ? " is-empty" : ""}">
+      <div class="portal-cat-card">
         <div>
           <div class="portal-cat-header">
-            <div class="portal-cat-icon">${escapeHtml(cat.icon)}</div>
+            <div class="portal-cat-icon">${categoryIcon(cat.id, "icon-lg")}</div>
             <div>
               <h3 class="portal-cat-title">${escapeHtml(cat.name)}</h3>
               <p class="portal-cat-desc">${escapeHtml(cat.description)}</p>
             </div>
           </div>
-          <div class="stat-item" style="margin-top: 8px;">
-            ${isEmpty
-              ? `📭 <strong>Chưa có quán nào</strong> trong danh mục này`
-              : `✨ Có <strong>${count} quán</strong> được chọn lọc & đánh giá`}
+          <div class="portal-cat-count">
+            ${icon("pin", "icon-sm")} <strong>${count}</strong> quán trong cẩm nang
           </div>
         </div>
 
         <div class="portal-cat-actions">
-          <a href="${escapeHtml(mapsLink)}" target="_blank" rel="noopener" class="btn-open-maps-list">
-            📍 Mở trên Google Maps
-          </a>
-          <button class="btn-explore-cat" data-cat="${escapeHtml(cat.id)}" ${isEmpty ? "disabled" : ""}>
-            ${isEmpty ? "Chưa có quán" : `🔍 Xem quán (${count})`}
+          <button class="btn-explore-cat" data-cat="${escapeHtml(cat.id)}">
+            ${icon("search")} Xem ${count} quán
           </button>
+          <a href="${escapeHtml(mapsLink)}" target="_blank" rel="noopener" class="btn-open-maps-list">
+            ${icon("external")} Tìm thêm trên Google Maps
+          </a>
         </div>
       </div>
     `;
   });
 
   html += `</div>`;
+
+  if (empty.length) {
+    html += `
+      <div class="portal-empty-note">
+        <p>
+          ${icon("inbox")}
+          Chưa có quán nào ở ${empty.map(c => `<strong>${escapeHtml(c.name)}</strong>`).join(" và ")}.
+        </p>
+        <button type="button" class="btn-add-place" id="portalAddPlaceBtn">
+          ${icon("plus")} Thêm quán đầu tiên
+        </button>
+      </div>
+    `;
+  }
+
   elements.portalContainer.innerHTML = html;
+
+  const portalAddBtn = elements.portalContainer.querySelector("#portalAddPlaceBtn");
+  if (portalAddBtn) portalAddBtn.addEventListener("click", openAddPlaceModal);
 
   // Lắng nghe sự kiện "Xem quán" từ Portal Card
   elements.portalContainer.querySelectorAll(".btn-explore-cat").forEach(btn => {
@@ -1111,6 +1347,12 @@ function getFilteredPlaces() {
     // Lọc theo Mức giá
     if (state.selectedPriceLevel !== "all" && place.priceLevel !== state.selectedPriceLevel) {
       return false;
+    }
+
+    // Lọc theo Mục đích đi quán (hẹn hò, làm việc, tụ tập...)
+    if (state.selectedVibe !== ALL_VIBES) {
+      const vibes = (place.vibe || []).map(v => String(v).trim());
+      if (vibes.indexOf(state.selectedVibe) === -1) return false;
     }
 
     // Lọc theo trạng thái xác minh dữ liệu
@@ -1165,12 +1407,15 @@ function renderPlaces() {
   if (filteredPlaces.length === 0) {
     elements.placesContainer.innerHTML = `
       <div class="empty-state">
-        <div class="empty-icon">🍽️🔍</div>
-        <h3 class="empty-title">Không tìm thấy quán phù hợp</h3>
-        <p class="empty-desc">Thử tìm kiếm với từ khóa khác hoặc xóa bớt các bộ lọc xem sao nhé!</p>
-        <button class="btn-submit" style="max-width: 220px; margin: 0 auto;" onclick="resetFilters()">
-          Đặt lại bộ lọc
-        </button>
+        <div class="empty-icon">${icon("search")}</div>
+        <h3 class="empty-title">Không có quán nào khớp bộ lọc</h3>
+        <p class="empty-desc">Thử bỏ bớt bộ lọc, hoặc thêm quán này vào cẩm nang.</p>
+        <div class="empty-actions">
+          <button class="btn-view-details" onclick="resetFilters()">Bỏ bộ lọc</button>
+          <button class="btn-view-details btn-secondary-link" onclick="openAddPlaceModal()">
+            ${icon("plus")} Thêm quán mới
+          </button>
+        </div>
       </div>
     `;
     return;
@@ -1181,65 +1426,63 @@ function renderPlaces() {
     return;
   }
 
-  const FALLBACK_IMG = "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=600&q=80";
+  /* Thẻ quán rút từ 10 khối xuống 5: ảnh, tên, quận + giá, món nên gọi, điểm.
+     Bản cũ nhồi thêm nhãn danh mục in hoa, huy hiệu "Chưa xác minh", giờ mở
+     cửa, một đoạn trích dẫn in nghiêng và ba hashtag không bấm được — thẻ cao
+     609px trên màn hình 844px, tức chưa đầy một quán mỗi màn hình, mà không
+     khối nào được ưu tiên nên cũng chẳng khối nào nổi lên.
 
+     Danh mục, giờ mở cửa, nhận xét và tag vẫn còn đủ trong modal chi tiết. */
   let html = "";
   filteredPlaces.forEach(place => {
-    const categoryObj = state.categories.find(c => c.id === place.category) || {};
-    const categoryName = categoryObj.name ? categoryObj.name.split("(")[0].trim() : place.category;
     const reviewText = formatReviewCount(place.reviewCount);
+    const hasPhoto = hasRealPhoto(place);
 
     html += `
       <div class="place-card" data-id="${escapeHtml(place.id)}">
         <div class="place-image-wrapper">
-          <img src="${escapeHtml(photoSrc(place.image, 600) || FALLBACK_IMG)}"
-               alt="${escapeHtml(place.name)}"
-               class="place-img"
-               loading="lazy"
-               onerror="this.onerror=null;this.src='${FALLBACK_IMG}'">
-          <div class="place-district-badge">📍 ${escapeHtml(place.district || "Chưa rõ quận")}</div>
+          ${hasPhoto
+            ? `<img src="${escapeHtml(photoSrc(place.image, 600))}"
+                    alt="${escapeHtml(place.name)}"
+                    class="place-img"
+                    loading="lazy">`
+            : photoSlotHtml(place)}
+          <div class="place-district-badge">
+            ${icon("pin", "icon-sm")} ${escapeHtml(place.district || "Chưa rõ quận")}
+          </div>
           <div class="place-badge-rating">
-            ★ ${formatRating(place.rating)}${reviewText ? ` <span style="font-size: 0.72rem; opacity: 0.85; margin-left: 2px;">(${reviewText})</span>` : ""}
+            ${starIcon("icon-sm")} ${formatRating(place.rating)}${reviewText ? ` <span class="rating-count">${reviewText}</span>` : ""}
           </div>
         </div>
 
         <div class="place-card-body">
-          <div class="place-flag-row">
-            <span class="place-category-tag">${escapeHtml(categoryObj.icon || "🍜")} ${escapeHtml(categoryName)}</span>
-            ${place.verified
-              ? `<span class="verified-flag" title="Bạn đã đối chiếu thông tin này với Google Maps">✅ Đã xác minh</span>`
-              : `<span class="unverified-flag" title="Số sao, giá và review chưa được đối chiếu với Google Maps">⚠️ Chưa xác minh</span>`}
-          </div>
-
           <h3 class="place-title" data-open-place="${escapeHtml(place.id)}">${escapeHtml(place.name)}</h3>
 
           <div class="place-meta-row">
-            <span class="meta-item price-tag">💵 ${place.priceRange ? escapeHtml(place.priceRange) : '<span class="value-missing">Chưa có giá</span>'}</span>
-            ${place.time ? `<span class="meta-item">⏰ ${escapeHtml(place.time)}</span>` : ""}
+            <span class="meta-item price-tag">
+              ${icon("wallet", "icon-sm")} ${place.priceRange ? escapeHtml(place.priceRange) : '<span class="value-missing">Chưa có giá</span>'}
+            </span>
+            ${place.verified
+              ? `<span class="verified-flag" title="Bạn đã đối chiếu thông tin này với Google Maps">${icon("check", "icon-sm")} Đã xác minh</span>`
+              : ""}
           </div>
 
           ${place.mustTry ? `
             <div class="must-try-box">
-              <div class="must-try-label">✨ Món Must-Try:</div>
+              <div class="must-try-label">${icon("sparkle", "icon-sm")} Món nên gọi</div>
               <div class="must-try-content">${escapeHtml(place.mustTry)}</div>
             </div>
           ` : ""}
 
-          ${place.review
-            ? `<p class="place-review-snippet">"${escapeHtml(place.review)}"</p>`
-            : `<p class="place-review-snippet value-missing">Chưa có nhận xét — bấm Sửa để thêm cảm nhận của bạn.</p>`}
-
-          <div class="place-tags-row">
-            ${(place.tags || []).slice(0, 3).map(tag => `<span class="sub-tag">#${escapeHtml(tag)}</span>`).join("")}
-          </div>
-
           <div class="place-card-actions">
-            <a href="${escapeHtml(place.mapsUrl || buildMapsSearchUrl(place))}" target="_blank" rel="noopener" class="btn-open-maps">
-              📍 Mở Google Maps
-            </a>
             <button class="btn-view-details" data-open-place="${escapeHtml(place.id)}">
-              Chi tiết
+              Xem chi tiết
             </button>
+            <a href="${escapeHtml(place.mapsUrl || buildMapsSearchUrl(place))}" target="_blank" rel="noopener"
+               class="btn-maps-icon" title="Mở ${escapeHtml(place.name)} trên Google Maps"
+               aria-label="Mở ${escapeHtml(place.name)} trên Google Maps">
+              ${icon("pin")}
+            </a>
           </div>
         </div>
       </div>
@@ -1274,32 +1517,35 @@ function renderPlaceRows(places) {
     // Hàng phụ: chỉ ghép những thứ thật sự có, để không hiện ra chuỗi "· ·".
     // Không nhắc lại tên danh mục ở đây — biểu tượng bên trái đã nói điều đó
     // rồi, và nhường chỗ cho khoảng giá thì dòng mới đủ rộng, không bị cắt cụt.
+    // Giờ mở cửa cũng bỏ khỏi dòng này: trên máy 390px ba mục làm cả ba cùng
+    // bị cắt cụt một lúc. Giờ mở cửa xem trong chi tiết.
     const meta = [
-      place.district ? `📍 ${escapeHtml(place.district)}` : "",
-      place.priceRange ? `💵 ${escapeHtml(place.priceRange)}` : "",
-      place.time ? `⏰ ${escapeHtml(place.time)}` : ""
+      place.district ? escapeHtml(place.district) : "",
+      place.priceRange ? escapeHtml(place.priceRange) : ""
     ].filter(Boolean).join(' <span class="row-dot">·</span> ');
 
     html += `
       <article class="place-row" data-id="${escapeHtml(place.id)}">
         <button class="row-main" type="button" data-open-place="${escapeHtml(place.id)}">
-          <span class="row-icon" title="${escapeHtml(categoryName || "Chưa xếp danh mục")}">${escapeHtml(categoryObj.icon || "🍜")}</span>
+          <span class="row-icon" title="${escapeHtml(categoryName || "Chưa xếp danh mục")}">${categoryIcon(place.category)}</span>
           <span class="row-text">
             <span class="row-title-line">
               <span class="row-title">${escapeHtml(place.name)}</span>
-              ${place.verified ? `<span class="row-verified" title="Đã đối chiếu với Google Maps">✅</span>` : ""}
+              ${place.verified
+                ? `<span class="row-verified" title="Đã đối chiếu với Google Maps">${icon("check", "icon-sm")}</span>`
+                : ""}
             </span>
             <span class="row-meta">${meta || '<span class="value-missing">Chưa có thông tin khu vực</span>'}</span>
-            ${place.mustTry ? `<span class="row-musttry">✨ ${escapeHtml(place.mustTry)}</span>` : ""}
+            ${place.mustTry ? `<span class="row-musttry">${icon("sparkle")} ${escapeHtml(place.mustTry)}</span>` : ""}
           </span>
           <span class="row-rating">
-            <span class="row-stars">★ ${formatRating(place.rating)}</span>
+            <span class="row-stars">${starIcon("icon-sm")} ${formatRating(place.rating)}</span>
             ${reviewText ? `<span class="row-reviews">${escapeHtml(reviewText)}</span>` : ""}
           </span>
         </button>
         <a class="row-maps" href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener"
            title="Mở ${escapeHtml(place.name)} trên Google Maps"
-           aria-label="Mở ${escapeHtml(place.name)} trên Google Maps">📍</a>
+           aria-label="Mở ${escapeHtml(place.name)} trên Google Maps">${icon("pin")}</a>
       </article>
     `;
   });
@@ -1319,75 +1565,94 @@ function openPlaceDetailModal(placeId) {
   if (!place || !elements.placeModalContent) return;
 
   const categoryObj = state.categories.find(c => c.id === place.category) || {};
-  const FALLBACK_IMG = "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80";
+  const categoryName = categoryObj.name ? categoryObj.name.split("(")[0].trim() : place.category;
 
   const mapsUrl = place.mapsUrl || buildMapsSearchUrl(place);
   const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent([place.name, place.address].filter(Boolean).join(" "))}`;
   const missing = '<span class="value-missing">Chưa có dữ liệu</span>';
+  const hasPhoto = hasRealPhoto(place);
 
+  /* Tên quán lên ĐẦU. Bản cũ cho người xem đi qua bốn thứ khác trước khi tới
+     tên: nhãn danh mục in hoa, huy hiệu điểm, cảnh báo "Chưa xác minh", rồi
+     "Nguồn: Dữ liệu dựng sẵn" — tên quán là thứ thứ năm, nằm tận ~870px.
+
+     Các nhãn "📍 Địa chỉ:", "💵 Khoảng giá:", "⏰ Giờ mở cửa:" cũng bỏ: một
+     địa chỉ trông đã ra địa chỉ, một khoảng thời gian trông đã ra giờ mở cửa.
+     Biểu tượng bên trái đủ để phân biệt, và tiêu đề có dấu hai chấm lặp năm
+     lần liền chỉ làm trang dài thêm. */
   elements.placeModalContent.innerHTML = `
-    <img src="${escapeHtml(photoSrc(place.image, 1200) || FALLBACK_IMG)}"
-         alt="${escapeHtml(place.name)}"
-         class="modal-hero-img"
-         onerror="this.onerror=null;this.src='${FALLBACK_IMG}'">
+    ${hasPhoto
+      ? `<img src="${escapeHtml(photoSrc(place.image, 1200))}"
+              alt="${escapeHtml(place.name)}"
+              class="modal-hero-img">`
+      : photoSlotHtml(place, "modal-hero-slot")}
 
     <div class="modal-body">
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px;">
-        <span class="place-category-tag">${escapeHtml(categoryObj.icon || "🍽️")} ${escapeHtml(categoryObj.name || place.category)}</span>
-        <span class="place-badge-rating" style="position: static; font-size: 0.95rem;">
-          ★ ${formatRating(place.rating)} / 5.0 ${place.reviewCount ? `(${place.reviewCount.toLocaleString("vi-VN")} đánh giá)` : ""}
+      <h2 class="modal-title modal-place-name">${escapeHtml(place.name)}</h2>
+
+      <div class="modal-identity-row">
+        <span class="place-category-tag">${categoryIcon(place.category)} ${escapeHtml(categoryName)}</span>
+        <span class="modal-rating">
+          ${starIcon("icon-sm")} ${formatRating(place.rating)}
+          ${place.reviewCount ? `<span class="rating-count">${place.reviewCount.toLocaleString("vi-VN")} đánh giá</span>` : ""}
         </span>
       </div>
 
-      <div class="place-flag-row">
-        ${place.verified
-          ? `<span class="verified-flag">✅ Đã đối chiếu với Google Maps</span>`
-          : `<span class="unverified-flag">⚠️ Chưa xác minh — số liệu có thể không chính xác</span>`}
-        <span class="source-tag">Nguồn: ${escapeHtml(DATA_SOURCE_LABELS[place.dataSource] || place.dataSource)}</span>
-      </div>
-
-      <h2 class="modal-title">${escapeHtml(place.name)}</h2>
-
-      <div class="place-meta-row" style="margin-bottom: 16px; font-size: 0.9rem;">
-        <span class="meta-item">📍 <strong>Địa chỉ:</strong> ${place.address ? escapeHtml(place.address) : missing}</span>
-      </div>
-
-      <div class="place-meta-row" style="margin-bottom: 16px;">
-        <span class="meta-item price-tag">💵 <strong>Khoảng giá:</strong> ${place.priceRange ? escapeHtml(place.priceRange) : missing}</span>
-        <span class="meta-item">⏰ <strong>Giờ mở cửa:</strong> ${place.time ? escapeHtml(place.time) : missing}</span>
-      </div>
+      <dl class="modal-facts">
+        <div class="modal-fact">
+          <dt>${icon("pin")}<span class="sr-only">Địa chỉ</span></dt>
+          <dd>${place.address ? escapeHtml(place.address) : missing}</dd>
+        </div>
+        <div class="modal-fact">
+          <dt>${icon("wallet")}<span class="sr-only">Khoảng giá</span></dt>
+          <dd class="price-tag">${place.priceRange ? escapeHtml(place.priceRange) : missing}</dd>
+        </div>
+        <div class="modal-fact">
+          <dt>${icon("clock")}<span class="sr-only">Giờ mở cửa</span></dt>
+          <dd>${place.time ? escapeHtml(place.time) : missing}</dd>
+        </div>
+      </dl>
 
       ${place.mustTry ? `
-        <div class="must-try-box" style="margin-bottom: 18px; padding: 12px 16px;">
-          <div class="must-try-label" style="font-size: 0.95rem;">🌟 Món đặc trưng nhất định phải thử:</div>
-          <div class="must-try-content" style="font-size: 0.92rem; margin-top: 4px;">${escapeHtml(place.mustTry)}</div>
+        <div class="must-try-box modal-must-try">
+          <div class="must-try-label">${icon("sparkle", "icon-sm")} Món nên gọi</div>
+          <div class="must-try-content">${escapeHtml(place.mustTry)}</div>
         </div>
       ` : ""}
 
-      <div style="margin-bottom: 18px;">
-        <h4 style="font-size: 0.95rem; font-weight: 800; margin-bottom: 6px;">📝 Đánh giá & Cảm nhận:</h4>
-        <p style="color: var(--text-main); font-size: 0.92rem; line-height: 1.6; background: var(--bg-page); padding: 12px 16px; border-radius: 8px; border-left: 3px solid var(--primary);">
-          ${place.review ? escapeHtml(place.review) : '<span class="value-missing">Bạn chưa viết nhận xét cho quán này.</span>'}
-        </p>
-      </div>
+      ${place.review ? `
+        <blockquote class="modal-review">${escapeHtml(place.review)}</blockquote>
+      ` : `
+        <p class="modal-review value-missing">Bạn chưa viết nhận xét cho quán này.</p>
+      `}
 
       ${place.tags && place.tags.length > 0 ? `
-        <div style="margin-bottom: 20px;">
-          <h4 style="font-size: 0.85rem; font-weight: 700; color: var(--text-muted); margin-bottom: 8px;">TAGS / ĐẶC ĐIỂM:</h4>
-          <div class="place-tags-row">
-            ${place.tags.map(t => `<span class="sub-tag" style="font-size: 0.8rem; padding: 4px 10px;">#${escapeHtml(t)}</span>`).join("")}
-          </div>
+        <div class="place-tags-row modal-tags">
+          ${place.tags.map(t => `<span class="sub-tag">${escapeHtml(t)}</span>`).join("")}
         </div>
       ` : ""}
 
-      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;">
-        <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener" class="btn-open-maps" style="padding: 12px; font-size: 0.95rem;">
-          📍 Mở xem vị trí trên Google Maps
+      ${!hasPhoto ? `
+        <p class="modal-photo-invite">
+          ${icon("camera")} Quán này chưa có ảnh. Lần tới ghé qua, chụp một tấm rồi thêm vào
+          phần Quản lý quán — ảnh thật kể được nhiều hơn ảnh có sẵn.
+        </p>
+      ` : ""}
+
+      <div class="modal-actions">
+        <a href="${escapeHtml(directionsUrl)}" target="_blank" rel="noopener" class="btn-open-maps">
+          ${icon("route")} Chỉ đường tới quán
         </a>
-        <a href="${escapeHtml(directionsUrl)}" target="_blank" rel="noopener" class="btn-submit" style="text-align: center; text-decoration: none; padding: 12px; font-size: 0.95rem; margin-top: 0; background: #10B981; border-color: #059669; box-shadow: 2px 2px 0px #059669;">
-          🚗 Chỉ đường trực tiếp đến quán
+        <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener" class="btn-view-details btn-secondary-link">
+          ${icon("external")} Xem trên Google Maps
         </a>
       </div>
+
+      <p class="modal-provenance">
+        ${place.verified
+          ? `${icon("check", "icon-sm")} Đã đối chiếu với Google Maps`
+          : `${icon("info", "icon-sm")} Số liệu lấy từ ${escapeHtml(DATA_SOURCE_LABELS[place.dataSource] || place.dataSource || "nguồn chưa rõ")}, bạn chưa đối chiếu lại`}
+      </p>
     </div>
   `;
 
@@ -1424,7 +1689,7 @@ function fillCategorySelect(select, selectedId) {
     const label = isCustomCategory(chosen) ? customCategoryLabel(chosen) : chosen;
     html += `<option value="${escapeHtml(chosen)}">${CUSTOM_CATEGORY_ICON} ${escapeHtml(label)}</option>`;
   }
-  html += `<option value="${NEW_CATEGORY_OPTION}">➕ Thêm món mới…</option>`;
+  html += `<option value="${NEW_CATEGORY_OPTION}">+ Thêm món mới…</option>`;
 
   select.innerHTML = html;
   select.value = chosen;
@@ -1471,7 +1736,7 @@ function attachCategoryPicker(prefix) {
   const confirmNew = () => {
     const typed = input.value.replace(/\s+/g, " ").trim();
     if (!typed) {
-      showToast("⚠️ Hãy gõ tên món, ví dụ: Bánh tráng trộn");
+      showToast("Hãy gõ tên món, ví dụ: Bánh tráng trộn");
       input.focus();
       return;
     }
@@ -1481,15 +1746,15 @@ function attachCategoryPicker(prefix) {
     // ("Cà phê") thì gộp về danh mục đó thay vì đẻ thêm bản gần trùng
     const categoryId = normalizeCategoryId(CUSTOM_CATEGORY_PREFIX + typed);
     if (!categoryId) {
-      showToast("⚠️ Tên món chưa hợp lệ.");
+      showToast("Tên món chưa hợp lệ.");
       return;
     }
 
     selectCategoryOption(select, categoryId);
     hideRow();
     showToast(isCustomCategory(categoryId)
-      ? `🏷️ Đã chọn "${customCategoryLabel(categoryId)}" — lưu quán là danh mục này hiện ra.`
-      : `✅ "${typed}" trùng danh mục có sẵn, đã chọn giúp bạn.`);
+      ? `Đã chọn "${customCategoryLabel(categoryId)}" — lưu quán là danh mục này hiện ra.`
+      : `"${typed}" trùng danh mục có sẵn, đã chọn giúp bạn.`);
   };
 
   select.addEventListener("change", () => {
@@ -1568,11 +1833,15 @@ function updateMagicKeyHint() {
     return;
   }
 
+  /* Viết lại từ một thông báo lỗi thành một lời dặn trước.
+     Bản cũ bật ra ngay khi mở form — "Chưa kết nối được máy chủ" đập vào mắt
+     trước khi người dùng kịp dán gì. Chưa có gì hỏng cả; đây chỉ là chuyện
+     nên biết trước để dán đúng loại link ngay từ đầu. */
   elements.magicKeyHint.style.display = "";
   elements.magicKeyHint.innerHTML =
-    `🔌 Chưa kết nối được máy chủ — link rút gọn <code>maps.app.goo.gl</code> có thể không đọc được.
-     Hãy dán URL đầy đủ trên thanh địa chỉ, hoặc
-     <a href="javascript:void(0)" onclick="openSettingsModal()">kiểm tra cài đặt</a>.`;
+    `${icon("info")} Máy chủ đang không chạy, nên link rút gọn <code>maps.app.goo.gl</code> có thể
+     không đọc được. Hãy mở link đó rồi chép URL đầy đủ trên thanh địa chỉ —
+     hoặc <a href="javascript:void(0)" onclick="openSettingsModal()" class="inline-link">kiểm tra cài đặt</a>.`;
 }
 
 // Danh mục dữ liệu nhận diện nhanh 0ms cho các link rút gọn Google Maps đã xác thực
@@ -2056,8 +2325,8 @@ async function flushThenReport(placeId, placeName) {
 
   const ten = placeName ? `"${placeName}"` : "Thay đổi vừa rồi";
   showToast(state.sheetStatus.configured
-    ? `⚠️ ${ten} mới lưu ở máy này, CHƯA lên Google Sheet — máy khác sẽ chưa thấy. Sẽ tự thử lại.`
-    : `⚠️ ${ten} mới lưu ở máy này. Chưa nối được Google Sheet nên máy khác chưa thấy.`);
+    ? `${ten} mới lưu ở máy này, CHƯA lên Google Sheet — máy khác sẽ chưa thấy. Sẽ tự thử lại.`
+    : `${ten} mới lưu ở máy này. Chưa nối được Google Sheet nên máy khác chưa thấy.`);
 }
 
 function queueSheetDelete(placeId) {
@@ -2190,7 +2459,7 @@ async function flushSheetQueue(options) {
     await refreshSheetStatus();
   }
   if (!state.sheetStatus.configured) {
-    if (!silent) showToast("☁️ Chưa nối Google Sheet — mở ⚙️ Nguồn dữ liệu để xem cách cài.");
+    if (!silent) showToast("Chưa nối Google Sheet — mở Nguồn dữ liệu để xem cách cài.");
     return null;
   }
 
@@ -2222,12 +2491,12 @@ async function flushSheetQueue(options) {
         const khongHoiDuoc = typeof v !== "number";
 
         const loi = khongHoiDuoc
-          ? "⚠️ Chưa xoá trên Google Sheet: không hỏi được Apps Script" +
+          ? "Chưa xoá trên Google Sheet: không hỏi được Apps Script" +
             (state.sheetStatus.scriptError ? " (" + state.sheetStatus.scriptError + ")" : "") +
             ". Quán đã xoá khỏi trang, sẽ xoá nốt trên Sheet ở lần đồng bộ sau."
-          : "⚠️ Chưa xoá trên Google Sheet: Apps Script đang là bản " + v +
+          : "Chưa xoá trên Google Sheet: Apps Script đang là bản " + v +
             ", xoá bằng bản đó có thể mất nhầm dòng khác. " +
-            "Dán lại tools/sheet-appscript.gs rồi bấm ☁️ lần nữa.";
+            "Dán lại tools/sheet-appscript.gs rồi bấm Đồng bộ lần nữa.";
 
         if (!silent) showToast(loi);
         else console.warn("Hoãn xoá trên Sheet: " +
@@ -2240,7 +2509,7 @@ async function flushSheetQueue(options) {
   } catch (e) {
     // Hàng đợi giữ nguyên phần chưa gửi được, lần sau thử lại
     saveSheetQueue();
-    if (!silent) showToast("⚠️ Chưa đẩy lên Sheet được: " + e.message);
+    if (!silent) showToast("Chưa đẩy lên Sheet được: " + e.message);
     else console.warn("Đồng bộ nền thất bại:", e.message);
     return null;
   }
@@ -2252,7 +2521,7 @@ async function pushAllToSheet() {
   saveSheetQueue();
 
   const result = await flushSheetQueue({ silent: false });
-  if (result) showToast(`⬆️ Đã đẩy ${result.pushed} quán lên Google Sheet.`);
+  if (result) showToast(`Đã đẩy ${result.pushed} quán lên Google Sheet.`);
   return result;
 }
 
@@ -2267,7 +2536,7 @@ async function pullFromSheet(options) {
   const silent = Boolean(options && options.silent);
 
   if (!state.sheetStatus.configured) {
-    if (!silent) showToast("☁️ Chưa nối Google Sheet — mở ⚙️ Nguồn dữ liệu để xem cách cài.");
+    if (!silent) showToast("Chưa nối Google Sheet — mở Nguồn dữ liệu để xem cách cài.");
     return null;
   }
 
@@ -2278,7 +2547,7 @@ async function pullFromSheet(options) {
       .filter(r => r && r.id && r.name)
       .map(r => { delete r.updatedAt; return r; }); // cột giờ ghi, trang không dùng
   } catch (e) {
-    if (!silent) showToast("⚠️ Không đọc được Google Sheet: " + e.message);
+    if (!silent) showToast("Không đọc được Google Sheet: " + e.message);
     return null;
   }
 
@@ -2323,7 +2592,7 @@ async function pullFromSheet(options) {
   );
 
   if (incomingNew.length === 0 && incomingChanged.length === 0 && removedIds.size === 0) {
-    if (!silent) showToast("✅ Máy và Google Sheet đã khớp nhau.");
+    if (!silent) showToast("Máy và Google Sheet đã khớp nhau.");
     return { added: 0, updated: 0, removed: 0 };
   }
 
@@ -2338,8 +2607,8 @@ async function pullFromSheet(options) {
   if (silent && removedIds.size > 0 &&
       removedIds.size > Math.max(5, state.places.length * QUA_NHIEU)) {
     console.warn(`Hoãn gỡ ${removedIds.size} quán: quá nhiều so với ${state.places.length} quán đang có.`);
-    showToast(`⚠️ Google Sheet đang thiếu ${removedIds.size} quán so với máy này. ` +
-              `Bấm ☁️ để xem và quyết định — đồng bộ nền không tự gỡ nhiều đến thế.`);
+    showToast(`Google Sheet đang thiếu ${removedIds.size} quán so với máy này. ` +
+              `Bấm Đồng bộ để xem và quyết định — đồng bộ nền không tự gỡ nhiều đến thế.`);
     removedIds.clear();
   }
 
@@ -2386,7 +2655,7 @@ async function pullFromSheet(options) {
   }
 
   if (!silent) {
-    showToast(`📥 Đã lấy về ${incomingNew.length} quán mới, cập nhật ${incomingChanged.length} quán` +
+    showToast(`Đã lấy về ${incomingNew.length} quán mới, cập nhật ${incomingChanged.length} quán` +
       (removedIds.size > 0 ? `, gỡ ${removedIds.size} quán đã xoá ở máy khác.` : "."));
   }
   return { added: incomingNew.length, updated: incomingChanged.length, removed: removedIds.size };
@@ -2426,7 +2695,7 @@ async function syncOnOpen() {
 
     const result = await pullFromSheet({ silent: true });
     if (result && (result.added || result.updated || result.removed)) {
-      showToast(`📥 Đã lấy từ Google Sheet: ${result.added} quán mới, ${result.updated} quán cập nhật` +
+      showToast(`Đã lấy từ Google Sheet: ${result.added} quán mới, ${result.updated} quán cập nhật` +
         (result.removed ? `, gỡ ${result.removed} quán đã xoá ở máy khác.` : "."));
     }
     return result;
@@ -2467,11 +2736,11 @@ async function syncWithSheet() {
     await refreshSheetStatus();
 
     if (!state.sheetStatus.online) {
-      showToast("🔴 Không gọi được máy chủ — trang đang chạy ngoài Vercel?");
+      showToast("Không gọi được máy chủ — trang đang chạy ngoài Vercel?");
       return;
     }
     if (!state.sheetStatus.configured) {
-      showToast("☁️ Chưa nối Google Sheet. Mở ⚙️ Nguồn dữ liệu để xem 7 bước cài.");
+      showToast("Chưa nối Google Sheet. Mở Nguồn dữ liệu để xem 7 bước cài.");
       openSettingsModal();
       return;
     }
@@ -2507,7 +2776,7 @@ function renderSyncPendingBar() {
   bar.style.display = "flex";
   bar.innerHTML = `
     <span class="sync-pending-text">
-      ⏳ <strong>${pending}</strong> thay đổi chưa lên Google Sheet —
+      ${icon("cloud")} <strong>${pending}</strong> thay đổi chưa lên Google Sheet —
       ${state.sheetStatus.configured
         ? "máy khác sẽ chưa thấy."
         : "chưa nối được Sheet" + (state.sheetStatus.reason ? ` (${escapeHtml(state.sheetStatus.reason)})` : "") + "."}
@@ -2519,7 +2788,7 @@ function renderSyncPendingBar() {
     await refreshSheetStatus();
     const result = await flushSheetQueue({ silent: false });
     if (result && pendingSheetCount() === 0) {
-      showToast(`☁️ Đã đẩy ${result.pushed} thay đổi lên Google Sheet.`);
+      showToast(`Đã đẩy ${result.pushed} thay đổi lên Google Sheet.`);
     }
     updateSheetButton();
   });
@@ -2527,6 +2796,9 @@ function renderSyncPendingBar() {
 
 function updateSheetButton() {
   renderSyncPendingBar();
+  // Bảng "Thêm" trên điện thoại là chỗ DUY NHẤT thấy được trạng thái đồng bộ,
+  // vì nút ☁️ nằm trong .header-actions vốn bị ẩn dưới 768px.
+  updateMoreSheetStatus();
 
   const btn = elements.btnSyncSheet;
   if (!btn) return;
@@ -2534,14 +2806,14 @@ function updateSheetButton() {
   const pending = pendingSheetCount();
 
   if (state.sheetStatus.syncing) {
-    btn.textContent = "⏳";
+    btn.innerHTML = icon("reset");
     btn.classList.add("is-syncing");
     btn.title = "Đang đồng bộ với Google Sheet…";
     return;
   }
 
   btn.classList.remove("is-syncing");
-  btn.textContent = "☁️";
+  btn.innerHTML = icon("cloud");
   btn.classList.toggle("sheet-off", !state.sheetStatus.configured);
   btn.classList.toggle("sheet-pending", pending > 0);
   btn.dataset.pending = pending > 0 ? String(pending) : "";
@@ -2771,6 +3043,86 @@ function photoSrc(url, width) {
   return url + "&w=" + (width === 1200 ? "1200" : "600");
 }
 
+/* ===================================================================
+   ẢNH QUÁN
+   -------------------------------------------------------------------
+   Bộ dữ liệu dựng sẵn trỏ tới 61 liên kết Unsplash nhưng chỉ có khoảng
+   30 ảnh khác nhau — hai tấm lặp tới 7 lần, nên lướt lưới thẻ là thấy
+   cùng một biển hiệu "CAFE" hiện đi hiện lại. Tệ hơn, chúng là ảnh
+   stock nên hay chẳng liên quan gì tới quán: "Santorini Vibes Cafe"
+   (concept Hy Lạp xanh–trắng bên Hồ Tây) hiện một cốc trà kèm bánh quy
+   trên nền trắng.
+
+   Một cẩm nang ẩm thực bán đúng cảm giác "chỗ này có thật, tôi đã
+   tới" — ảnh sai phá hỏng đúng cái đó, nên nó còn tệ hơn không ảnh.
+   Chỗ chưa có ảnh chụp thật giờ là một ô chữ, kèm lời mời tự thêm ảnh
+   (app đã có sẵn luồng tải ảnh lên Drive).
+
+   Muốn quay lại dùng ảnh stock: đổi hằng số dưới đây thành true.
+   =================================================================== */
+const USE_SEED_STOCK_PHOTOS = false;
+
+/** Ảnh stock của bộ dữ liệu dựng sẵn — khác với ảnh người dùng tự dán link */
+function isStockPhoto(url) {
+  return typeof url === "string" && url.indexOf("images.unsplash.com") !== -1;
+}
+
+/** Quán này đã có ảnh đáng hiện chưa? */
+function hasRealPhoto(place) {
+  const url = place && place.image;
+  if (!url) return false;
+  if (isStockPhoto(url)) return USE_SEED_STOCK_PHOTOS;
+  return true;
+}
+
+/**
+ * Sắc màu của ô ảnh, suy từ id quán.
+ *
+ * Cùng một quán thì luôn ra cùng một màu, kể cả sau khi lọc hay sắp xếp lại —
+ * nếu màu nhảy theo vị trí trong danh sách thì mắt không neo được vào đâu.
+ */
+function placeHue(place) {
+  const key = String((place && place.id) || "x");
+  let h = 7;
+  for (let i = 0; i < key.length; i++) {
+    h = (h * 31 + key.charCodeAt(i)) % 360;
+  }
+  return h;
+}
+
+/** Ô chữ thay cho ảnh, dùng chung cho thẻ quán và modal chi tiết */
+function photoSlotHtml(place, extraClass = "") {
+  const categoryObj = state.categories.find(c => c.id === place.category) || {};
+  const label = categoryObj.name ? categoryObj.name.split("(")[0].trim() : "Chưa xếp danh mục";
+  return `
+    <div class="place-photo-slot ${extraClass}" style="--slot-h: ${placeHue(place)}">
+      ${categoryIcon(place.category)}
+      <span class="place-photo-slot-label">${escapeHtml(label)}</span>
+    </div>
+  `;
+}
+
+/**
+ * Đổ biểu tượng vào mọi phần tử có data-icon trong index.html.
+ *
+ * Để HTML chỉ ghi tên biểu tượng thay vì nhúng cả đoạn <svg> — tệp dễ đọc hơn
+ * nhiều, và đổi hình một biểu tượng thì chỉ sửa ở icons.js.
+ */
+function hydrateIcons(root = document) {
+  root.querySelectorAll("[data-icon]").forEach(el => {
+    const name = el.dataset.icon;
+    if (!name) return;
+    const svg = icon(name);
+    if (!svg) return;
+
+    // Ghi đè innerHTML sẽ xoá mất chữ nếu ai đó đặt data-icon thẳng lên thẻ
+    // đang chứa nhãn. Phần tử mang data-icon phải rỗng; có chữ thì chèn thêm
+    // chứ không thay.
+    if (el.textContent.trim()) el.insertAdjacentHTML("afterbegin", svg);
+    else el.innerHTML = svg;
+  });
+}
+
 /**
  * Gắn nút tải ảnh cho một form.
  * prefix là "newPlace" hoặc "editPlace" — các id trong HTML theo đúng quy ước đó.
@@ -2819,7 +3171,7 @@ function attachPhotoUploader(prefix, getPlaceId) {
   if (preview) {
     preview.addEventListener("error", () => {
       preview.hidden = true;
-      setHint("⚠️ Link ảnh này không tải được.", "err");
+      setHint("Link ảnh này không tải được.", "err");
     });
     preview.addEventListener("load", () => { preview.hidden = false; });
   }
@@ -2830,7 +3182,7 @@ function attachPhotoUploader(prefix, getPlaceId) {
     if (!file) return;
 
     if (!state.sheetStatus.configured) {
-      setHint("⚠️ Chưa nối Google Sheet nên chưa có chỗ chứa ảnh. Mở 🔌 để cài.", "err");
+      setHint("Chưa nối Google Sheet nên chưa có chỗ chứa ảnh. Mở Nguồn dữ liệu để cài.", "err");
       return;
     }
 
@@ -2852,9 +3204,9 @@ function attachPhotoUploader(prefix, getPlaceId) {
       const kb = Math.round((dataUrl.length * 3) / 4 / 1024);
       const secs = result.ms && result.ms.tong ? ` trong ${(result.ms.tong / 1000).toFixed(1)}s` : "";
       const retried = result.attempts > 1 ? ` — phải thử ${result.attempts} lần` : "";
-      setHint(`✅ Đã lưu vào Drive (${kb} KB${secs}${retried}). Nhớ bấm Lưu để ghi vào cẩm nang.`, "ok");
+      setHint(`Đã lưu vào Drive (${kb} KB${secs}${retried}). Nhớ bấm Lưu để ghi vào cẩm nang.`, "ok");
     } catch (e) {
-      setHint("⚠️ Tải ảnh thất bại: " + explainPhotoError(e.message), "err");
+      setHint("Tải ảnh thất bại: " + explainPhotoError(e.message), "err");
     } finally {
       button.disabled = false;
       button.textContent = originalLabel;
@@ -3021,7 +3373,7 @@ function setAutofillBusy(label) {
     elements.btnQuickAutoFill.textContent = label;
     elements.btnQuickAutoFill.disabled = true;
   } else {
-    elements.btnQuickAutoFill.textContent = "✨ Quét & Tự điền";
+    elements.btnQuickAutoFill.innerHTML = icon("sparkle") + " Quét và tự điền";
     elements.btnQuickAutoFill.disabled = false;
   }
 }
@@ -3043,7 +3395,7 @@ function mergeFound(target, source) {
 async function handleMagicAutoFill() {
   const rawInput = (elements.quickMapsUrlInput ? elements.quickMapsUrlInput.value : "").trim();
   if (!rawInput) {
-    showToast("⚠️ Vui lòng dán link Google Maps của quán!");
+    showToast("Vui lòng dán link Google Maps của quán!");
     if (elements.quickMapsUrlInput) elements.quickMapsUrlInput.focus();
     return;
   }
@@ -3160,8 +3512,8 @@ async function handleMagicAutoFill() {
 
     if (!found.name && !found.address) {
       showToast(backendUsed
-        ? "⚠️ Máy chủ không đọc được thông tin từ link này. Hãy thử dán URL đầy đủ trên thanh địa chỉ trình duyệt."
-        : "⚠️ Chưa kết nối được máy chủ. Hãy mở link rồi copy URL đầy đủ trên thanh địa chỉ, hoặc dán tên quán ở dòng phía trên link.");
+        ? "Máy chủ không đọc được thông tin từ link này. Hãy thử dán URL đầy đủ trên thanh địa chỉ trình duyệt."
+        : "Chưa kết nối được máy chủ. Hãy mở link rồi copy URL đầy đủ trên thanh địa chỉ, hoặc dán tên quán ở dòng phía trên link.");
       return;
     }
 
@@ -3176,13 +3528,13 @@ async function handleMagicAutoFill() {
     if (found.time) filled.push("giờ mở cửa");
     if (found.image) filled.push("ảnh");
 
-    let message = `🪄 Đã điền: ${filled.join(", ")}. Còn điểm Google Maps — mời bạn nhập.`;
+    let message = `Đã điền: ${filled.join(", ")}. Còn điểm Google Maps — mời bạn nhập.`;
     if (notes.length > 0) message += ` (${notes.join("; ")})`;
     showToast(message);
     scanResultMapsUrl = found.mapsUrl;
   } catch (err) {
     console.error("Lỗi khi quét link:", err);
-    showToast("⚠️ Quét thất bại: " + err.message + ". Bạn có thể nhập tay bên dưới.");
+    showToast("Quét thất bại: " + err.message + ". Bạn có thể nhập tay bên dưới.");
   } finally {
     setAutofillBusy(null);
     // Đặt ngoài khối try: đây là tiện ích con trỏ, không phải một phần của việc quét
@@ -3257,7 +3609,7 @@ function handleAddPlaceSubmit(e) {
   const address = readValue("newPlaceAddress");
 
   if (!name || !address) {
-    showToast("⚠️ Vui lòng nhập tên quán và địa chỉ!");
+    showToast("Vui lòng nhập tên quán và địa chỉ!");
     return;
   }
 
@@ -3306,7 +3658,7 @@ function handleAddPlaceSubmit(e) {
 
   closeAllModals();
   elements.addPlaceForm.reset();
-  showToast(`🎉 Đã thêm "${name}" vào Food Guide!`);
+  showToast(`Đã thêm "${name}" vào Food Guide!`);
 }
 
 /** Tìm quán đã có, khớp theo link Google Maps hoặc theo tên (bỏ dấu) */
@@ -3375,7 +3727,7 @@ function exportGoogleSheetsCSV() {
   downloadAnchor.remove();
   URL.revokeObjectURL(url);
 
-  showToast("📊 Đã xuất file Google Sheets (.csv) thành công!");
+  showToast("Đã xuất file Google Sheets (.csv) thành công!");
 }
 
 /**
@@ -3405,9 +3757,13 @@ function renderManagerTable() {
   if (!elements.managerTableBody) return;
   const q = normalizeVi((elements.managerSearchInput ? elements.managerSearchInput.value : "").trim());
   const dFilter = (elements.managerDistrictFilter ? elements.managerDistrictFilter.value : "Tất cả quận");
+  const vFilter = (elements.managerVerifyFilter ? elements.managerVerifyFilter.value : "all");
 
   const filtered = state.places.filter(p => {
     if (dFilter !== "Tất cả quận" && p.district !== dFilter) return false;
+    // Soát dữ liệu: lọc ra đúng những quán chưa đối chiếu với Google Maps
+    if (vFilter === "verified" && !p.verified) return false;
+    if (vFilter === "unverified" && p.verified) return false;
     if (q) {
       const haystack = normalizeVi(`${p.name} ${p.address} ${p.district}`);
       if (!haystack.includes(q)) return false;
@@ -3431,7 +3787,11 @@ function renderManagerTable() {
   let html = "";
   filtered.forEach(p => {
     const cat = state.categories.find(c => c.id === p.category);
-    const catName = cat ? `${cat.icon} ${cat.name.split("(")[0]}` : (p.category || "Chưa phân loại");
+    // cat.icon (emoji) vẫn còn trong data.js vì nó phục vụ các thẻ <option>
+    // trong ô chọn danh mục — <option> không chứa được SVG. Ở đây thì dùng
+    // được biểu tượng nét, nên dùng.
+    const catLabel = cat ? cat.name.split("(")[0].trim() : (p.category || "Chưa phân loại");
+    const catName = `${categoryIcon(p.category, "icon-sm")} ${escapeHtml(catLabel)}`;
     const reviewFormatted = p.reviewCount ? `${formatReviewCount(p.reviewCount)}+` : "—";
 
     html += `
@@ -3442,31 +3802,31 @@ function renderManagerTable() {
         </td>
         <td>
           <strong style="display: block; color: var(--text-main); font-size: 0.92rem;">${escapeHtml(p.name)}</strong>
-          <span style="font-size: 0.78rem; color: var(--text-muted);">📍 ${escapeHtml(p.address || "Chưa có địa chỉ")} (${escapeHtml(p.district || "chưa rõ quận")})</span>
+          <span style="font-size: 0.78rem; color: var(--text-muted);">${icon("pin", "icon-sm")} ${escapeHtml(p.address || "Chưa có địa chỉ")} (${escapeHtml(p.district || "chưa rõ quận")})</span>
           <div style="margin-top: 5px;">
             ${p.verified
-              ? `<span class="verified-flag">✅ Đã xác minh</span>`
-              : `<span class="unverified-flag">⚠️ Chưa xác minh</span>`}
+              ? `<span class="verified-flag">${icon("check", "icon-sm")} Đã xác minh</span>`
+              : `<span class="unverified-flag">${icon("alert", "icon-sm")} Chưa xác minh</span>`}
             <span class="source-tag">${escapeHtml(DATA_SOURCE_LABELS[p.dataSource] || p.dataSource)}</span>
           </div>
         </td>
         <td>
-          <span class="sub-tag">${escapeHtml(catName)}</span>
+          <span class="sub-tag">${catName}</span>
         </td>
         <td>
-          <span style="font-weight: 800; color: #D97706;">★ ${formatRating(p.rating)}</span>
+          <span style="font-weight: 800; color: #B45309;">${starIcon("icon-sm")} ${formatRating(p.rating)}</span>
           <span class="reviews-count-tag">(${escapeHtml(reviewFormatted)})</span>
         </td>
         <td style="text-align: center; white-space: nowrap;">
           <button class="btn-row-action btn-row-verify" data-toggle-verify="${escapeHtml(p.id)}"
                   title="${p.verified ? "Bỏ đánh dấu đã xác minh" : "Đánh dấu đã đối chiếu với Google Maps"}">
-            ${p.verified ? "↩️ Bỏ dấu" : "✅ Xác minh"}
+            ${p.verified ? "Bỏ dấu" : "Xác minh"}
           </button>
           <button class="btn-row-action btn-row-edit" data-edit-place="${escapeHtml(p.id)}">
-            ✏️ Sửa
+            ${icon("edit", "icon-sm")} Sửa
           </button>
           <button class="btn-row-action btn-row-delete" data-delete-place="${escapeHtml(p.id)}">
-            🗑️ Xóa
+            Xoá
           </button>
         </td>
       </tr>
@@ -3576,7 +3936,7 @@ function handleEditPlaceSubmit(e) {
   queueSheetUpsert(state.places[index]);
 
   elements.editPlaceModal.classList.remove("active");
-  showToast(`✏️ Đã cập nhật thông tin "${name}" thành công!`);
+  showToast(`Đã cập nhật thông tin "${name}" thành công!`);
 }
 
 /**
@@ -3594,7 +3954,7 @@ function deletePlace(placeId) {
     refreshAfterDataChange();
     renderManagerTable();
     queueSheetDelete(placeId);
-    showToast(`🗑️ Đã xóa "${place.name}" khỏi danh sách!`);
+    showToast(`Đã xóa "${place.name}" khỏi danh sách!`);
   }
 }
 
@@ -3609,8 +3969,8 @@ function toggleVerified(placeId) {
   renderManagerTable();
   queueSheetUpsert(place);
   showToast(place.verified
-    ? `✅ Đã đánh dấu "${place.name}" là đã đối chiếu`
-    : `↩️ Đã bỏ dấu xác minh của "${place.name}"`);
+    ? `Đã đánh dấu "${place.name}" là đã đối chiếu`
+    : `Đã bỏ dấu xác minh của "${place.name}"`);
 }
 
 /**
@@ -3629,10 +3989,10 @@ function copyShareUrl() {
   if (elements.shareUrlInput) {
     elements.shareUrlInput.select();
     navigator.clipboard.writeText(elements.shareUrlInput.value).then(() => {
-      showToast("📋 Đã sao chép link Food Guide vào bộ nhớ tạm!");
+      showToast("Đã sao chép link Food Guide vào bộ nhớ tạm!");
     }).catch(() => {
       document.execCommand("copy");
-      showToast("📋 Đã sao chép link!");
+      showToast("Đã sao chép link!");
     });
   }
 }
@@ -3688,8 +4048,8 @@ function renderSheetSettingsBox() {
     const rowNote = typeof state.sheetStatus.rows === "number" ? ` (${state.sheetStatus.rows} dòng)` : "";
     box.className = "backend-status ok";
     box.textContent = pending > 0
-      ? `🟡 Đã nối Google Sheet${rowNote}${pendingNote} Bấm ☁️ trên đầu trang để đẩy nốt.`
-      : `🟢 Đã nối Google Sheet${rowNote} — thêm, sửa, xoá quán và tải ảnh đều tự ghi lên.`;
+      ? `Đã nối Google Sheet${rowNote}${pendingNote} Bấm Đồng bộ để đẩy nốt.`
+      : `Đã nối Google Sheet${rowNote} — thêm, sửa, xoá quán và tải ảnh đều tự ghi lên.`;
   }
 
   if (elements.btnSheetPush) elements.btnSheetPush.disabled = !state.sheetStatus.configured;
@@ -3708,11 +4068,11 @@ function saveSettings() {
   try {
     localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(state.settings));
   } catch (e) {
-    showToast("⚠️ Không lưu được cài đặt.");
+    showToast("Không lưu được cài đặt.");
     return;
   }
 
-  showToast("💾 Đã lưu cài đặt endpoint.");
+  showToast("Đã lưu cài đặt endpoint.");
   refreshBackendStatus();
   closeAllModals();
 }
@@ -3767,7 +4127,7 @@ async function testBackend() {
     );
   } finally {
     elements.btnTestBackend.disabled = false;
-    elements.btnTestBackend.textContent = "🧪 Kiểm tra kết nối";
+    elements.btnTestBackend.textContent = "Kiểm tra kết nối";
   }
 }
 

@@ -1302,7 +1302,7 @@ const DISTRICTS = ["Tất cả quận"].concat(
 const DEFAULT_PROFILE = {
   name: "Hanoi Food & Cafe Guide",
   handle: "@foodie_hanoi",
-  bio: "Cẩm nang ẩm thực & 50 quán cà phê, đồ uống chọn lọc tại Hà Nội. Đạt chuẩn đánh giá >= 4.0★ và số lượt review chính xác từ Google Maps! 🥢☕✨",
+  bio: "Quán ăn và cà phê chọn lọc ở Hà Nội. Mỗi quán đều từ 4.0 sao và trên 100 lượt đánh giá trên Google Maps.",
   avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80",
   socials: {
     facebook: "https://facebook.com",

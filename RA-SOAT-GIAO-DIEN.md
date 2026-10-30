@@ -1,6 +1,6 @@
 # Rà soát và chỉnh sửa giao diện — Hanoi Food & Cafe Guide
 
-Ngày 29/10/2026 · 15/15 mục đã làm xong
+Ngày 29/10/2026 · 15/15 mục đã làm xong · **Vòng 2: đã xử lý xong ý kiến của bạn (xem mục 7 ở cuối)**
 
 Tài liệu này tóm tắt những gì đã đổi, vì sao, và **ba chỗ tôi tự quyết mà bạn nên xem lại** (mục 14, 15 và phần Giả định ở cuối).
 
@@ -10,18 +10,18 @@ Cách đo: dựng site bằng Chromium qua Playwright ở hai khổ màn hình �
 
 ## 1. Kết quả tổng quan
 
-| Chỉ số | Trước | Sau |
-|---|---|---|
-| Vị trí quán đầu tiên — mobile, chế độ Thẻ | **890px** (ngoài màn hình 844px) | **553px** |
-| Chiều cao một thẻ quán — mobile | 609px (72% màn hình) | 395px (47%) |
-| Vị trí quán đầu tiên — desktop | 819px (khung 900px) | 757px |
-| Phần tử tràn ngang — desktop | 12 | **0** |
-| Hàng lọc `#quickFilterPills` — mobile | track 1245px trong khe 273px | 904px trong khe 340px, có vệt mờ báo cuộn |
-| Cặp màu không đạt tương phản | 10 (sáng) + 5 (tối) | **0 + 0** |
-| Vùng chạm dưới 44px — mobile | 25 | 6 (đều ≥40px, nằm trong modal quản trị) |
-| Quy tắc `:focus-visible` | **0** | có, áp cho mọi phần tử tương tác |
-| Emoji trong giao diện | ~37 | 0 (xem mục 12 để biết chỗ còn lại và lý do) |
-| Ảnh stock trùng lặp tải về | 63 ảnh, ~30 ảnh khác nhau | 3 |
+| Chỉ số                                             | Trước                                   | Sau                                                  |
+| ---------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
+| Vị trí quán đầu tiên — mobile, chế độ Thẻ | **890px** (ngoài màn hình 844px) | **553px**                                      |
+| Chiều cao một thẻ quán — mobile                 | 609px (72% màn hình)                    | 395px (47%)                                          |
+| Vị trí quán đầu tiên — desktop                | 819px (khung 900px)                       | 757px                                                |
+| Phần tử tràn ngang — desktop                     | 12                                        | **0**                                          |
+| Hàng lọc `#quickFilterPills` — mobile           | track 1245px trong khe 273px              | 904px trong khe 340px, có vệt mờ báo cuộn       |
+| Cặp màu không đạt tương phản                 | 10 (sáng) + 5 (tối)                     | **0 + 0**                                      |
+| Vùng chạm dưới 44px — mobile                    | 25                                        | 6 (đều ≥40px, nằm trong modal quản trị)        |
+| Quy tắc `:focus-visible`                          | **0**                               | có, áp cho mọi phần tử tương tác             |
+| Emoji trong giao diện                               | ~37                                       | 0 (xem mục 12 để biết chỗ còn lại và lý do) |
+| Ảnh stock trùng lặp tải về                      | 63 ảnh, ~30 ảnh khác nhau              | 3                                                    |
 
 Kiểm tra chức năng: 41/41 thao tác đạt trên cả hai khổ màn hình (đổi cách xem, lọc theo danh mục / mục đích / giá, tìm kiếm, mở–đóng cả 5 modal, đổi giao diện, bảng Thêm). Không có lỗi JavaScript nào.
 
@@ -55,13 +55,13 @@ Thêm một chấm cam trên nút "Thêm" khi còn thay đổi chưa đẩy lên
 
 **5. Tương phản màu và tiêu điểm bàn phím** ✅
 
-| Chỗ | Trước | Sau |
-|---|---|---|
-| Chip "Mọi trạng thái" đang chọn | 2.54:1 | nhóm chip này đã chuyển vào Quản lý |
-| Dòng món nên gọi trong danh sách | 2.82:1 | **6.5:1** (`--accent-orange-text`) |
-| Số lượt đánh giá | 2.56:1 | **4.8:1** (`--text-light` đổi giá trị) |
-| Chip chưa chọn | 4.34:1 | **7.1:1** (`--text-on-muted` mới) |
-| Dark mode, chip đang chọn | 3.68:1 | **~12:1** |
+| Chỗ                                  | Trước | Sau                                                |
+| ------------------------------------- | ------- | -------------------------------------------------- |
+| Chip "Mọi trạng thái" đang chọn  | 2.54:1  | nhóm chip này đã chuyển vào Quản lý        |
+| Dòng món nên gọi trong danh sách | 2.82:1  | **6.5:1** (`--accent-orange-text`)         |
+| Số lượt đánh giá                | 2.56:1  | **4.8:1** (`--text-light` đổi giá trị) |
+| Chip chưa chọn                      | 4.34:1  | **7.1:1** (`--text-on-muted` mới)         |
+| Dark mode, chip đang chọn           | 3.68:1  | **~12:1**                                    |
 
 Thêm khối `:focus-visible` dùng chung: viền 3px màu chủ đạo, đổi sang vàng trên các nền xanh đậm. Trước đây toàn bộ 55KB CSS không có lấy một quy tắc `:focus-visible` nào.
 
@@ -111,11 +111,11 @@ Tôi đã dựng một bảng thử toàn bộ 51 hình ở cả cỡ 38px và 1
 
 **Emoji còn lại và lý do giữ:**
 
-| Chỗ | Số lượng | Lý do |
-|---|---|---|
-| `icon:` của danh mục trong `data.js` | 9 | Phục vụ các thẻ `<option>` trong ô chọn danh mục — `<option>` không chứa được SVG. Phần hiển thị trên trang đều đã dùng biểu tượng nét. |
-| Đèn trạng thái 🔴🟡🟢⚪ trong modal Nguồn dữ liệu | 6 | Gán qua `textContent` nên không nhúng SVG được. Đây là bảng chẩn đoán kỹ thuật, và đèn màu là quy ước quen thuộc. Sửa được nếu bạn muốn. |
-| Favicon 🍜 | 1 | Biểu tượng tab trình duyệt. Ở 16px thì emoji đọc rõ hơn hình nét đơn sắc. |
+| Chỗ                                                     | Số lượng | Lý do                                                                                                                                                                    |
+| -------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `icon:` của danh mục trong `data.js`               | 9           | Phục vụ các thẻ `<option>` trong ô chọn danh mục — `<option>` không chứa được SVG. Phần hiển thị trên trang đều đã dùng biểu tượng nét.     |
+| Đèn trạng thái 🔴🟡🟢⚪ trong modal Nguồn dữ liệu | 6           | Gán qua `textContent` nên không nhúng SVG được. Đây là bảng chẩn đoán kỹ thuật, và đèn màu là quy ước quen thuộc. Sửa được nếu bạn muốn. |
+| Favicon 🍜                                               | 1           | Biểu tượng tab trình duyệt. Ở 16px thì emoji đọc rõ hơn hình nét đơn sắc.                                                                                 |
 
 **13. Một màu "đang chọn" duy nhất** ✅
 
@@ -181,16 +181,129 @@ Chưa commit — bạn xem rồi quyết.
 ## 5. Giả định tôi đã tự quyết — xin ý kiến
 
 1. **Bỏ ảnh stock (mục 14).** Đây là thay đổi dễ thấy nhất. Nếu bạn thấy lưới thẻ không ảnh trông trống trải quá thì đổi một dòng là quay lại được.
+   ý kiến: tôi thấy hơi trống trải, hãy tìm giải pháp để có ảnh, nếu có ảnh thật của quán thì tuyệt nhất
 2. **Trục lọc "Hợp cho" thay vì chia nhỏ nhóm cà phê (mục 15).** Nếu bạn muốn chia "Cà phê & Trà" thành các nhóm con thật (cafe view / cafe trứng / specialty / trà), tôi làm được — nhưng cần bạn chốt danh sách nhóm con, vì phân loại 54 quán theo cảm tính của tôi thì sẽ sai nhiều.
+   ý kiến: ý hay, bộ lọc này nên đổi tên là mục đích, là trường ko bắt buộc điền trong thông tin, nhưng sẽ giúp lọc nhanh quán theo mục đích
 3. **Chuyển bộ lọc trạng thái xác minh vào modal Quản lý.** Nếu bạn vẫn hay lọc "chưa xác minh" ngay ngoài trang chính thì tôi đưa trở lại.
+   Ý kiến: đồng ý bỏ
 4. **Nút đổi giao diện rời thanh nav vào bảng "Thêm".** Nếu bạn đổi Sáng/Tối thường xuyên thì nói, tôi trả nó về.
+   ý kiến: thực ra cứ để ớ góc vẫn oke
 5. **Bỏ giờ mở cửa khỏi dòng trong chế độ Danh sách** (giữ trong chi tiết). Trên màn 390px ba mục làm cả ba cùng bị cắt cụt một lúc.
+   ý kiến: đồng ý, bỏ dòng mở cửa đi
 
 ---
 
 ## 6. Những gì tôi *chưa* làm
 
 - **Chia nhỏ taxonomy cà phê** — xem giả định số 2 ở trên.
+  cmt: không chỉ áp dụng cho cà phê, mà sẽ áp dụng cho toàn bộ nhé
 - **Ảnh thật cho 60 quán** — chỉ bạn chụp được. Luồng tải ảnh lên Drive đã sẵn sàng; sau mỗi lần ghé quán thêm một tấm là lưới thẻ tự khá dần lên.
+  Cmt:tham khảo có thể chụp bằng playright khi tìm tên quán ko ?
 - **Đèn trạng thái emoji trong modal Nguồn dữ liệu** — xem bảng ở mục 12.
+  oke
 - **Chạy thử trên máy thật.** Tôi đo bằng Chromium giả lập iPhone 14 Pro. Vài thứ chỉ máy thật mới lộ: `backdrop-filter` trên Safari cũ, vùng an toàn khi xoay ngang màn hình, và cảm giác cuộn của các hàng chip ngang. Đáng mở thử trên điện thoại của bạn trước khi deploy.
+  cứ chỉnh rồi tôi sẽ test thực tế UAT sau
+
+---
+
+# 7. VÒNG 2 — đã xử lý ý kiến của bạn
+
+## 7.1. Ảnh: đã có ảnh trở lại, và hết lặp 7 lần
+
+> *Ý kiến: "tôi thấy hơi trống trải, hãy tìm giải pháp để có ảnh, nếu có ảnh thật của quán thì tuyệt nhất"*
+
+Bật ảnh trở lại, nhưng sửa đúng cái đã làm nó hỏng. Giờ có **ba trạng thái ảnh**, mỗi trạng thái trông khác nhau:
+
+| | Hiển thị |
+|---|---|
+| **Ảnh thật** (bạn chụp, tải lên Drive hoặc tự dán link) | Nguyên bản, không nhãn, không can thiệp gì |
+| **Ảnh minh hoạ** (ảnh stock của bộ dữ liệu dựng sẵn) | Nguyên màu, kèm nhãn nhỏ **"Ảnh minh hoạ"** ở góc dưới-trái |
+| **Chưa có ảnh** | Ô chữ như vòng 1 |
+
+**Sửa cái gốc: chia lại ảnh cho đều.** Vấn đề thật không phải là "có ảnh hay không", mà là 54 quán cà phê chỉ dùng 19 tấm ảnh, chia rất lệch — có tấm 7 lần, có tấm 1 lần. Giờ ảnh được chia đều trong kho của từng danh mục (ảnh cà phê không nhảy sang quán phở):
+
+| | Trước | Sau |
+|---|---|---|
+| Tấm lặp nhiều nhất | **7 lần** | **3 lần** |
+| Số ảnh khác nhau hiện trên lưới | 19 | **24** |
+| Cặp thẻ liền kề trùng ảnh | có | **0** |
+
+**Một hướng tôi đã thử rồi bỏ:** phủ lên mỗi ảnh một lớp màu lấy từ id quán, để hai quán dùng chung một tấm ảnh trông khác hẳn nhau. Kỹ thuật thì chạy tốt và lưới nhìn rất "có hệ thống" — nhưng nó làm **phở hoá hồng và cà phê hoá xanh lá**. Ảnh món ăn sống được là nhờ đúng màu, nên với một cẩm nang ẩm thực đó là đánh đổi sai. Chia lại ảnh cho đều giải quyết đúng vấn đề đó mà không đụng tới màu. (Ghi lại ở đây phòng khi bạn thấy ý đó hay và muốn bật lên — code cũ nằm trong lịch sử git.)
+
+**Đường tới ảnh thật — ngắn lại từ 5 bước còn 2.** Trong modal chi tiết của quán chưa có ảnh thật giờ có nút **"Thêm ảnh thật"**, bấm vào là mở thẳng form Sửa và cuộn tới ô tải ảnh. Trước đây phải: đóng chi tiết → mở Quản lý quán → tìm lại quán → bấm Sửa → cuộn xuống. Năm bước cho việc người ta vừa mới nghĩ tới khi đang xem đúng quán đó.
+
+### Trả lời câu hỏi: chụp ảnh bằng Playwright khi tìm tên quán?
+
+**Với Google Maps thì không nên** — và lý do nằm ngay trong code của chính dự án này.
+
+[api/place.js](api/place.js) đã ghi rõ vì sao không dùng Google Places API: điều khoản Maps Platform §3.2.1(v) cấm phân phối ứng dụng dùng Core Services tại "Prohibited Territory", mà **Việt Nam nằm trong danh sách đó**. Đó là lý do số sao và lượt đánh giá phải nhập tay.
+
+Nếu đã từ chối dùng API chính thức vì điều khoản, thì đi cào màn hình bằng Playwright là đi cửa sau của cùng một dịch vụ — vi phạm nặng hơn, không nhẹ hơn. Thêm ba lý do kỹ thuật:
+
+1. Ảnh chụp màn hình Google Maps là ảnh một **giao diện web** (có thanh tìm kiếm, nút, menu), không phải ảnh món ăn hay ảnh quán. Dán lên thẻ sẽ xấu hơn cả ô chữ hiện tại.
+2. Bản quyền ảnh trong Google Maps thuộc về người chụp hoặc chủ quán, không thuộc Google — và cũng không thuộc mình.
+3. Google đổi DOM liên tục và có chống bot; crawler sẽ hỏng âm thầm, rồi một ngày trả về ảnh trang CAPTCHA.
+
+**Những đường còn lại, xếp theo mức tôi khuyên dùng:**
+
+| Cách | Đánh giá |
+|---|---|
+| **Bạn tự chụp, tải lên Drive** | Tốt nhất, và đã có sẵn đường đi. Không vướng bản quyền, ảnh đúng quán, đúng món. Nút "Thêm ảnh thật" ở trên là để rút ngắn việc này. Mỗi lần ghé quán thêm một tấm — 60 quán không phải làm trong một hôm. |
+| **Xin ảnh từ chính quán** | Quán nào cũng sẵn lòng, và họ có ảnh đẹp sẵn. Mất công nhắn tin nhưng được ảnh chuẩn kèm quyền dùng rõ ràng. |
+| **Lấy `og:image` từ website / fanpage của quán** | Về nguyên tắc đây là tấm ảnh chính quán công bố để làm thẻ xem trước khi chia sẻ link, nên dùng lại kèm dẫn nguồn là hợp lệ hơn hẳn cào Google. Nhưng Facebook chặn phần lớn truy cập tự động nếu không có token, và nhiều quán Hà Nội không có website. Làm được, nhưng tỉ lệ thành công thấp — nói nếu bạn vẫn muốn thử. |
+| **Ảnh minh hoạ như hiện tại** | Đang dùng. Lấp chỗ trống một cách trung thực cho tới khi có ảnh thật. |
+| **Cào ảnh Google Maps bằng Playwright** | Không nên, vì ba lý do ở trên. |
+
+## 7.2. "Hợp cho" đổi tên thành "Mục đích", và thành một trường thật
+
+> *Ý kiến: "ý hay, bộ lọc này nên đổi tên là mục đích, là trường ko bắt buộc điền trong thông tin, nhưng sẽ giúp lọc nhanh quán theo mục đích"*
+> *Cmt mục 6: "không chỉ áp dụng cho cà phê, mà sẽ áp dụng cho toàn bộ nhé"*
+
+Ở vòng 1 "Hợp cho" mới chỉ là một bộ lọc đọc từ dữ liệu dựng sẵn — bạn không nhập được, không sửa được, không xuất ra được. Giờ nó là một trường đầy đủ, **áp dụng cho mọi danh mục**:
+
+- **Đổi tên** thành **"Mục đích"** ở hàng lọc.
+- **Thêm ô "Mục đích" vào cả form Thêm quán và form Sửa quán**, đánh dấu rõ *"— không bắt buộc"*.
+- **Có gợi ý để từ vựng khỏi phân mảnh:** dưới ô nhập là một hàng chip bấm được (bấm để thêm, bấm lần nữa để gỡ), lấy từ chính những mục đích đã dùng trong cẩm nang, kèm `<datalist>` gợi ý khi gõ. Không có cái này thì chẳng bao lâu sẽ có "Hẹn hò" / "hẹn hò" / "Date" thành ba chip riêng ở hàng lọc.
+- **Hiện trong modal chi tiết** ở hàng "Hợp cho". Tag nào trùng với mục đích thì không hiện lại — dữ liệu hay ghi "Check-in" vào cả hai trường.
+- **Xuất ra file .csv** ở cột mới "Mục Đích".
+- **Đồng bộ lên Google Sheet** ở cột mới "Mục đích".
+
+Đã kiểm tra trọn vòng: nhập → lưu → tải lại trang → vẫn còn → mở form Sửa thì điền sẵn đúng.
+
+> ⚠️ **Một việc phải làm một lần với Google Sheet đang có sẵn.** Cột "Mục đích" được thêm vào CUỐI danh sách cột, vì Apps Script đọc/ghi theo vị trí — chen vào giữa sẽ làm lệch toàn bộ dữ liệu của Sheet cũ. Các bước nằm trong phần chú thích ngay tại chỗ thêm cột trong [tools/sheet-appscript.gs](tools/sheet-appscript.gs):
+> 1. Dán lại file đó vào Apps Script rồi Deploy bản mới.
+> 2. Gõ tiêu đề "Mục đích" vào ô trống đầu tiên bên phải ở hàng 1 của tab chính.
+> 3. **Chỉ khi bạn dùng tab Crawl_Inbox:** cột tick "Duyệt" phải dịch sang phải một ô, vì nó luôn nằm ngay sau cột cuối. Nhanh nhất là xoá hẳn tab Crawl_Inbox — script tự dựng lại đúng chuẩn ở lần cào sau.
+>
+> Chưa làm bước này thì trang vẫn chạy bình thường, chỉ là Mục đích chưa sang được máy khác.
+
+## 7.3. Ba ý kiến còn lại
+
+| Ý kiến của bạn | Xử lý |
+|---|---|
+| **3.** "đồng ý bỏ" bộ lọc trạng thái xác minh khỏi trang chính | Giữ nguyên như vòng 1 — nó nằm trong modal Quản lý quán. |
+| **4.** "thực ra cứ để ở góc vẫn oke" (nút đổi giao diện) | Tôi hiểu là bạn đồng ý với cách đang bố trí, nên **không đổi gì**: trên máy tính nút vẫn ở góc phải đầu trang, trên điện thoại nằm trong bảng "Thêm". Nếu ý bạn là muốn nó hiện ra ngoài trên cả điện thoại nữa thì nói, sửa nhanh thôi. |
+| **5.** "đồng ý, bỏ dòng mở cửa đi" | Giữ nguyên như vòng 1 — chế độ Danh sách không hiện giờ mở cửa nữa, chi tiết thì vẫn có. |
+
+## 7.4. Vài thứ sửa thêm trong vòng 2
+
+- **Lỗi khoảng xám trong modal chi tiết:** ảnh chỉ cao 180px trong khung 240px, chừa một dải xám trống phía dưới. Do lớp `.modal-hero-slot` (vốn dành cho ô chữ) bị gắn nhầm lên cả khối ảnh. Đã bọc chung một khung `.modal-hero` giữ chiều cao.
+- **"Dữ liệu dựng sẵn"** — từ vựng hệ thống lọt ra giao diện, người đọc không hiểu là gì. Đổi thành "danh sách ban đầu của cẩm nang".
+- **"Món ngon Must-Try"** vẫn còn trong nhãn hai form và cột .csv, trong khi phần hiển thị đã đổi sang "Món nên gọi" ở vòng 1. Giờ thống nhất cả ba chỗ.
+- **Nhãn "Tags"** chỉnh cho cùng kiểu với "Mục đích" (`— không bắt buộc`).
+
+## 7.5. Số liệu sau vòng 2
+
+Giữ nguyên toàn bộ thành quả vòng 1, không có bước lùi nào:
+
+| | Giá trị |
+|---|---|
+| Quán đầu tiên — mobile | 553px (khung 844px) |
+| Chiều cao thẻ — mobile | 395px |
+| Cặp màu không đạt tương phản | **0** sáng + **0** tối |
+| Tấm ảnh lặp nhiều nhất | 7 → **3** |
+| Cặp thẻ liền kề trùng ảnh | **0** |
+| Kiểm tra chức năng | **41/41 đạt**, không lỗi JavaScript |
+| Vòng đời trường Mục đích | nhập → lưu → tải lại → sửa: **đạt** |
+
+File đổi trong vòng 2: `css/style.css`, `index.html`, `js/app.js`, `tools/sheet-appscript.gs`.

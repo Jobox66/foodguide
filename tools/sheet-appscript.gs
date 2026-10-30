@@ -177,7 +177,26 @@ var COLUMNS = [
   { key: 'verified',    label: 'Đã xác minh' },
   { key: 'featured',    label: 'Nổi bật' },
   { key: 'dataSource',  label: 'Nguồn dữ liệu' },
-  { key: 'updatedAt',   label: 'Cập nhật lúc' }
+  { key: 'updatedAt',   label: 'Cập nhật lúc' },
+
+  /* ───────────────────────────────────────────────────────────────────────
+     THÊM 29/10/2026 — cột "Mục đích" (hẹn hò, làm việc, tụ tập…).
+     Trường tuỳ chọn, ngăn nhau bằng dấu phẩy.
+
+     Đặt ở CUỐI chứ không chen vào giữa: script đọc/ghi theo VỊ TRÍ cột, nên
+     chen vào giữa sẽ làm lệch toàn bộ dữ liệu của những Sheet đang có sẵn.
+
+     NẾU SHEET CỦA BẠN ĐÃ TỒN TẠI TỪ TRƯỚC, cần làm một lần:
+       1. Dán lại toàn bộ file này vào Apps Script rồi Deploy bản mới.
+       2. Ở tab chính, gõ tiêu đề "Mục đích" vào ô trống đầu tiên bên phải
+          (hàng 1). Dữ liệu sẽ tự điền từ lần đẩy sau.
+       3. CHỈ KHI bạn có dùng tab Crawl_Inbox: cột tick "Duyệt" của tab đó
+          phải dịch sang phải một ô, vì nó luôn nằm ngay sau cột cuối cùng.
+          Cách nhanh nhất là xoá hẳn tab Crawl_Inbox — script tự dựng lại
+          đúng chuẩn ở lần cào tiếp theo.
+     Sheet tạo mới sau thời điểm này thì không phải làm gì cả.
+     ─────────────────────────────────────────────────────────────────────── */
+  { key: 'vibe',        label: 'Mục đích' }
 ];
 
 var ID_COLUMN = 1; // cột A
@@ -387,7 +406,10 @@ function placeToRow_(place) {
   return COLUMNS.map(function (col) {
     switch (col.key) {
       case 'tags':
-        return Array.isArray(place.tags) ? place.tags.join(', ') : String(place.tags || '');
+      case 'vibe':
+        return Array.isArray(place[col.key])
+          ? place[col.key].join(', ')
+          : String(place[col.key] || '');
       case 'rating':
       case 'reviewCount':
       case 'lat':
@@ -415,7 +437,8 @@ function rowToPlace_(row) {
 
     switch (col.key) {
       case 'tags':
-        place.tags = String(raw || '')
+      case 'vibe':
+        place[col.key] = String(raw || '')
           .split(/[,;]/)
           .map(function (t) { return t.trim(); })
           .filter(function (t) { return t; });

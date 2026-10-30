@@ -6,7 +6,7 @@
   <title>Hanoi Food & Cafe Guide | Cẩm Nang Ẩm Thực & Cà Phê Chọn Lọc</title>
   
   <!-- SEO & Social Meta -->
-  <meta name="description" content="Tổng hợp các quán ăn ngon, quán cà phê chill tại Hà Nội kèm đánh giá chi tiết, món must-try, mức giá và liên kết chỉ đường Google Maps nhanh chóng.">
+  <meta name="description" content="Tổng hợp các quán ăn ngon, quán cà phê chill tại Hà Nội kèm đánh giá chi tiết, món nên gọi, mức giá và liên kết chỉ đường Google Maps nhanh chóng.">
   <meta name="keywords" content="food guide, quan an ha noi, cafe ha noi, pho ngon ha noi, bun cha, cafe trung, linkbio food">
   <meta name="author" content="Foodie Hanoi">
   
@@ -119,13 +119,13 @@
         </div>
       </div>
 
-      <!-- Hợp cho — lọc theo mục đích đi (hẹn hò, làm việc, tụ tập...).
+      <!-- Mục đích — lọc theo việc người ta định làm ở quán (hẹn hò, làm việc, tụ tập...).
            Trục lọc này mới là trục chia được dữ liệu: 54/60 quán nằm chung một
            danh mục "Cà phê & Trà" nên lọc theo danh mục gần như không lọc được
            gì, trong khi trường `vibe` trải đều (Hẹn hò 28 · Chill 27 · Tụ tập
            20 · Check-in 19 · Làm việc 14). -->
       <div class="filter-scroll-wrapper" id="vibeFilterRow" style="margin-top: 8px;">
-        <div class="filter-scroll-title" id="lblVibe">Hợp cho</div>
+        <div class="filter-scroll-title" id="lblVibe">Mục đích</div>
         <div id="vibePills" class="filter-scroll-track" role="group" aria-labelledby="lblVibe">
           <!-- Render tự động từ app.js -->
         </div>
@@ -328,7 +328,7 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="newPlaceMustTry">Món ngon Must-Try (Gợi ý nên gọi)</label>
+            <label class="form-label" for="newPlaceMustTry">Món nên gọi</label>
             <input type="text" id="newPlaceMustTry" class="form-input" placeholder="Vd: Phở tái gầu giòn chấm quẩy, Cafe trứng nóng...">
           </div>
 
@@ -338,8 +338,21 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="newPlaceTags">Tags (cách nhau bởi dấu phẩy)</label>
-            <input type="text" id="newPlaceTags" class="form-input" placeholder="Vd: Phố cổ, Ăn sáng, View đẹp, Hẹn hò">
+            <label class="form-label" for="newPlaceTags">Tags <span class="form-optional">— không bắt buộc</span></label>
+            <input type="text" id="newPlaceTags" class="form-input" placeholder="Vd: Phố cổ, Ăn sáng, View đẹp">
+          </div>
+
+          <!-- Mục đích: trường tuỳ chọn, nhưng là trục lọc chia được dữ liệu
+               tốt nhất. Lọc theo danh mục món gần như vô dụng vì 54/60 quán
+               dồn vào một nhóm; còn "hợp cho việc gì" thì trải đều và đúng
+               với cách người ta chọn quán. Áp dụng cho MỌI danh mục, không
+               riêng cà phê. -->
+          <div class="form-group">
+            <label class="form-label" for="newPlaceVibe">Mục đích <span class="form-optional">— không bắt buộc</span></label>
+            <input type="text" id="newPlaceVibe" class="form-input" list="vibeSuggestions"
+                   placeholder="Vd: Hẹn hò, Làm việc, Tụ tập bạn bè" autocomplete="off">
+            <p class="form-hint">Quán này hợp để làm gì? Cách nhau bởi dấu phẩy. Dùng để lọc nhanh ở trang chính.</p>
+            <div id="newPlaceVibeChips" class="vibe-suggest-row"></div>
           </div>
 
           <div class="form-group">
@@ -535,7 +548,7 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="editPlaceMustTry">Món ngon Must-Try</label>
+            <label class="form-label" for="editPlaceMustTry">Món nên gọi</label>
             <input type="text" id="editPlaceMustTry" class="form-input">
           </div>
 
@@ -545,8 +558,16 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="editPlaceTags">Tags (cách nhau bởi dấu phẩy)</label>
+            <label class="form-label" for="editPlaceTags">Tags <span class="form-optional">— không bắt buộc</span></label>
             <input type="text" id="editPlaceTags" class="form-input">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="editPlaceVibe">Mục đích <span class="form-optional">— không bắt buộc</span></label>
+            <input type="text" id="editPlaceVibe" class="form-input" list="vibeSuggestions"
+                   placeholder="Vd: Hẹn hò, Làm việc, Tụ tập bạn bè" autocomplete="off">
+            <p class="form-hint">Quán này hợp để làm gì? Cách nhau bởi dấu phẩy. Dùng để lọc nhanh ở trang chính.</p>
+            <div id="editPlaceVibeChips" class="vibe-suggest-row"></div>
           </div>
 
           <div class="form-group">
@@ -762,6 +783,11 @@
       </button>
     </div>
   </div>
+
+  <!-- Gợi ý cho ô "Mục đích" ở cả hai form. Nội dung do app.js đổ vào, lấy từ
+       chính những mục đích đã dùng trong cẩm nang — nhờ vậy từ vựng tự hội tụ
+       thay vì mỗi quán một cách gọi ("Hẹn hò" / "hẹn hò" / "Date"). -->
+  <datalist id="vibeSuggestions"></datalist>
 
   <!-- TOAST NOTIFICATION CONTAINER -->
   <div id="toastContainer" class="toast-container"></div>

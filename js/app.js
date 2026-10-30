@@ -209,6 +209,32 @@ function normalizePriceLevel(value) {
   return PRICE_LEVEL_ALIASES[raw] || PRICE_LEVEL_ALIASES[normalizeVi(raw)] || "";
 }
 
+/**
+ * Đưa trường "Mục đích" về mảng chuỗi sạch.
+ *
+ * Nhận ba dạng vì dữ liệu vào từ ba đường khác nhau: mảng (data.js và
+ * LocalStorage), chuỗi ngăn bằng dấu phẩy hoặc chấm phẩy (ô nhập trong form,
+ * cột trên Google Sheet, file .csv). Bỏ mục trùng để gõ lặp không sinh ra hai
+ * chip giống nhau ở hàng lọc.
+ */
+function parseVibeList(value) {
+  const raw = Array.isArray(value)
+    ? value
+    : String(value == null ? "" : value).split(/[,;]/);
+
+  const seen = new Set();
+  const out = [];
+  raw.forEach(item => {
+    const text = String(item).trim();
+    if (!text) return;
+    const key = normalizeVi(text);
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(text);
+  });
+  return out;
+}
+
 function normalizePlace(place) {
   const rating = Number(place.rating);
   const reviewCount = Number(place.reviewCount);
@@ -217,6 +243,9 @@ function normalizePlace(place) {
     rating: Number.isFinite(rating) && rating > 0 ? Math.min(5, rating) : null,
     reviewCount: Number.isFinite(reviewCount) && reviewCount > 0 ? Math.round(reviewCount) : null,
     tags: Array.isArray(place.tags) ? place.tags : [],
+    // Mục đích đi quán — trường tuỳ chọn, nhận cả mảng lẫn chuỗi "a, b, c"
+    // (Google Sheet và file .csv đều trả về dạng chuỗi).
+    vibe: parseVibeList(place.vibe),
     district: place.district || "",
     category: normalizeCategoryId(place.category),
     priceLevel: normalizePriceLevel(place.priceLevel),
@@ -242,7 +271,7 @@ function formatReviewCount(count) {
 
 /** Nhãn nguồn dữ liệu hiển thị trong bảng quản lý */
 const DATA_SOURCE_LABELS = {
-  seed: "Dữ liệu dựng sẵn",
+  seed: "danh sách ban đầu của cẩm nang",
   google: "Google Places",
   backend: "Máy chủ giải mã link",
   osm: "OpenStreetMap",
@@ -858,6 +887,7 @@ function renderAll() {
   renderCityPills();
   renderDistrictsPills();
   renderVibePills();
+  refreshVibeSuggestions();
   renderCategoryPills();
   // setViewMode chứ không phải renderViewMode: lần vẽ đầu còn phải bật sáng
   // đúng tab / nút chuyển kiểu, vì kiểu mặc định tuỳ theo máy đang dùng.
@@ -1073,7 +1103,7 @@ function renderCategoryPills() {
 }
 
 /* ===================================================================
-   BỘ LỌC "HỢP CHO" (theo trường vibe)
+   BỘ LỌC "MỤC ĐÍCH" (trường vibe)
    -------------------------------------------------------------------
    Vì sao thêm trục lọc này: 54 trong 60 quán nằm chung danh mục "Cà
    phê & Trà", hai danh mục khác rỗng hẳn — nên lọc theo danh mục gần
@@ -1087,6 +1117,77 @@ function renderCategoryPills() {
 
 /** Giá trị "không lọc theo mục đích nào" */
 const ALL_VIBES = "Tất cả";
+
+/** Đọc ô "Mục đích" của một form ra mảng */
+function readVibeValue(inputId) {
+  const el = document.getElementById(inputId);
+  return el ? parseVibeList(el.value) : [];
+}
+
+/** Đổ mảng mục đích vào ô của form */
+function setVibeValue(inputId, list) {
+  const el = document.getElementById(inputId);
+  if (el) el.value = parseVibeList(list).join(", ");
+}
+
+/**
+ * Đổ gợi ý cho hai ô "Mục đích" — <datalist> cho ô gõ, và một hàng chip bấm
+ * được bên dưới.
+ *
+ * Gợi ý lấy từ chính những mục đích đã dùng trong cẩm nang, nên từ vựng tự hội
+ * tụ: không có chuyện cùng một ý mà mỗi quán ghi một kiểu rồi hàng lọc đẻ ra
+ * ba chip gần như giống nhau.
+ */
+function refreshVibeSuggestions() {
+  const tally = {};
+  state.places.forEach(p => {
+    (p.vibe || []).forEach(v => {
+      const key = String(v).trim();
+      if (key) tally[key] = (tally[key] || 0) + 1;
+    });
+  });
+  const ranked = Object.keys(tally).sort((a, b) => tally[b] - tally[a]);
+
+  const list = document.getElementById("vibeSuggestions");
+  if (list) {
+    list.innerHTML = ranked
+      .map(v => `<option value="${escapeHtml(v)}"></option>`)
+      .join("");
+  }
+
+  ["newPlaceVibe", "editPlaceVibe"].forEach(inputId => {
+    const row = document.getElementById(inputId + "Chips");
+    if (!row) return;
+    row.innerHTML = ranked.slice(0, 8)
+      .map(v => `<button type="button" class="vibe-suggest" data-vibe-add="${escapeHtml(v)}">${escapeHtml(v)}</button>`)
+      .join("");
+
+    row.querySelectorAll("[data-vibe-add]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const current = readVibeValue(inputId);
+        const picked = btn.dataset.vibeAdd;
+        // Bấm lần nữa thì bỏ ra — chip vừa là nút thêm vừa là nút gỡ
+        const key = normalizeVi(picked);
+        const next = current.some(v => normalizeVi(v) === key)
+          ? current.filter(v => normalizeVi(v) !== key)
+          : current.concat(picked);
+        setVibeValue(inputId, next);
+        markVibeChips(inputId);
+      });
+    });
+    markVibeChips(inputId);
+  });
+}
+
+/** Tô sáng những chip gợi ý đang có trong ô */
+function markVibeChips(inputId) {
+  const row = document.getElementById(inputId + "Chips");
+  if (!row) return;
+  const chosen = new Set(readVibeValue(inputId).map(normalizeVi));
+  row.querySelectorAll("[data-vibe-add]").forEach(btn => {
+    btn.classList.toggle("is-on", chosen.has(normalizeVi(btn.dataset.vibeAdd)));
+  });
+}
 
 /** Chỉ hiện những mục đích đủ phổ biến để lọc ra kết quả có nghĩa */
 const VIBE_MIN_COUNT = 4;
@@ -1368,7 +1469,8 @@ function getFilteredPlaces() {
         place.district,
         place.mustTry,
         place.review,
-        (place.tags || []).join(" ")
+        (place.tags || []).join(" "),
+        (place.vibe || []).join(" ")
       ].join(" "));
 
       if (!haystack.includes(q)) return false;
@@ -1436,17 +1538,11 @@ function renderPlaces() {
   let html = "";
   filteredPlaces.forEach(place => {
     const reviewText = formatReviewCount(place.reviewCount);
-    const hasPhoto = hasRealPhoto(place);
 
     html += `
       <div class="place-card" data-id="${escapeHtml(place.id)}">
         <div class="place-image-wrapper">
-          ${hasPhoto
-            ? `<img src="${escapeHtml(photoSrc(place.image, 600))}"
-                    alt="${escapeHtml(place.name)}"
-                    class="place-img"
-                    loading="lazy">`
-            : photoSlotHtml(place)}
+          ${placePhotoHtml(place, 600)}
           <div class="place-district-badge">
             ${icon("pin", "icon-sm")} ${escapeHtml(place.district || "Chưa rõ quận")}
           </div>
@@ -1581,11 +1677,7 @@ function openPlaceDetailModal(placeId) {
      Biểu tượng bên trái đủ để phân biệt, và tiêu đề có dấu hai chấm lặp năm
      lần liền chỉ làm trang dài thêm. */
   elements.placeModalContent.innerHTML = `
-    ${hasPhoto
-      ? `<img src="${escapeHtml(photoSrc(place.image, 1200))}"
-              alt="${escapeHtml(place.name)}"
-              class="modal-hero-img">`
-      : photoSlotHtml(place, "modal-hero-slot")}
+    <div class="modal-hero">${placePhotoHtml(place, 1200, "modal-hero-slot")}</div>
 
     <div class="modal-body">
       <h2 class="modal-title modal-place-name">${escapeHtml(place.name)}</h2>
@@ -1626,17 +1718,37 @@ function openPlaceDetailModal(placeId) {
         <p class="modal-review value-missing">Bạn chưa viết nhận xét cho quán này.</p>
       `}
 
-      ${place.tags && place.tags.length > 0 ? `
-        <div class="place-tags-row modal-tags">
-          ${place.tags.map(t => `<span class="sub-tag">${escapeHtml(t)}</span>`).join("")}
+      ${place.vibe && place.vibe.length > 0 ? `
+        <div class="modal-vibes">
+          <span class="modal-vibes-label">Hợp cho</span>
+          ${place.vibe.map(v => `<span class="vibe-tag">${escapeHtml(v)}</span>`).join("")}
         </div>
       ` : ""}
 
+      ${(() => {
+        // Bỏ những tag đã hiện ở hàng Mục đích ngay phía trên — dữ liệu hay
+        // ghi "Check-in" vào cả hai trường, hiện lại là thừa.
+        const shown = new Set((place.vibe || []).map(normalizeVi));
+        const rest = (place.tags || []).filter(t => !shown.has(normalizeVi(t)));
+        return rest.length ? `
+        <div class="place-tags-row modal-tags">
+          ${rest.map(t => `<span class="sub-tag">${escapeHtml(t)}</span>`).join("")}
+        </div>` : "";
+      })()}
+
       ${!hasPhoto ? `
-        <p class="modal-photo-invite">
-          ${icon("camera")} Quán này chưa có ảnh. Lần tới ghé qua, chụp một tấm rồi thêm vào
-          phần Quản lý quán — ảnh thật kể được nhiều hơn ảnh có sẵn.
-        </p>
+        <div class="modal-photo-invite">
+          <p>
+            ${icon("camera")}
+            ${photoKind(place) === "stock"
+              ? "Ảnh đang hiện là ảnh minh hoạ, không phải ảnh chụp tại quán."
+              : "Quán này chưa có ảnh."}
+            Lần tới ghé qua, chụp một tấm rồi thêm vào — ảnh thật kể được nhiều hơn ảnh có sẵn.
+          </p>
+          <button type="button" class="btn-add-photo" data-add-photo="${escapeHtml(place.id)}">
+            ${icon("upload")} Thêm ảnh thật
+          </button>
+        </div>
       ` : ""}
 
       <div class="modal-actions">
@@ -1655,6 +1767,18 @@ function openPlaceDetailModal(placeId) {
       </p>
     </div>
   `;
+
+  /* Đường ngắn nhất từ "quán này chưa có ảnh thật" tới chỗ thêm ảnh.
+     Trước đây muốn thêm ảnh phải: đóng chi tiết → mở Quản lý quán → tìm lại
+     quán trong bảng → bấm Sửa → cuộn xuống ô ảnh. Năm bước cho việc mà người
+     ta vừa mới nghĩ tới khi đang xem đúng quán đó. */
+  const addPhotoBtn = elements.placeModalContent.querySelector("[data-add-photo]");
+  if (addPhotoBtn) {
+    addPhotoBtn.addEventListener("click", () => {
+      elements.placeDetailModal.classList.remove("active");
+      openEditPlaceModal(addPhotoBtn.dataset.addPhoto, { focus: "photo" });
+    });
+  }
 
   elements.placeDetailModal.classList.add("active");
 }
@@ -1818,6 +1942,10 @@ function openAddPlaceModal() {
     priceSelect.insertAdjacentHTML("afterbegin", `<option value="">— Chưa rõ mức giá —</option>`);
   }
   if (priceSelect) priceSelect.value = "";
+
+  // Gợi ý mục đích lấy từ chính danh sách quán hiện có, nên phải nạp lại mỗi
+  // lần mở form chứ không chỉ lúc tải trang
+  refreshVibeSuggestions();
 
   updateMagicKeyHint();
   elements.addPlaceModal.classList.add("active");
@@ -2242,7 +2370,12 @@ const SHEET_FIELDS = [
   "id", "name", "category", "district", "address",
   "rating", "reviewCount", "priceRange", "priceLevel", "time",
   "mustTry", "review", "mapsUrl", "tags", "image",
-  "lat", "lng", "verified", "featured", "dataSource"
+  "lat", "lng", "verified", "featured", "dataSource",
+  // "vibe" (Mục đích) được THÊM VÀO CUỐI, không chen vào giữa: Apps Script
+  // đọc/ghi Sheet theo vị trí cột, nên chen giữa sẽ làm lệch mọi cột phía sau
+  // của những Sheet đang có sẵn. Thêm ở cuối thì Sheet cũ chỉ mọc thêm một
+  // cột trống bên phải. Xem ghi chú di trú ở đầu tools/sheet-appscript.gs.
+  "vibe"
 ];
 
 /** Mỗi lô gửi tối đa ngần này quán, để Apps Script không chạy quá lâu rồi bị cắt */
@@ -3044,35 +3177,146 @@ function photoSrc(url, width) {
 }
 
 /* ===================================================================
-   ẢNH QUÁN
+   ẢNH QUÁN — BA TRẠNG THÁI
    -------------------------------------------------------------------
-   Bộ dữ liệu dựng sẵn trỏ tới 61 liên kết Unsplash nhưng chỉ có khoảng
-   30 ảnh khác nhau — hai tấm lặp tới 7 lần, nên lướt lưới thẻ là thấy
-   cùng một biển hiệu "CAFE" hiện đi hiện lại. Tệ hơn, chúng là ảnh
-   stock nên hay chẳng liên quan gì tới quán: "Santorini Vibes Cafe"
-   (concept Hy Lạp xanh–trắng bên Hồ Tây) hiện một cốc trà kèm bánh quy
-   trên nền trắng.
+   Bối cảnh: bộ dữ liệu dựng sẵn trỏ tới 61 liên kết Unsplash nhưng chỉ
+   có khoảng 30 ảnh khác nhau — hai tấm lặp tới 7 lần, nên lướt lưới thẻ
+   là thấy cùng một biển hiệu "CAFE" hiện đi hiện lại. Chúng cũng là ảnh
+   stock nên hay chẳng liên quan gì tới quán.
 
-   Một cẩm nang ẩm thực bán đúng cảm giác "chỗ này có thật, tôi đã
-   tới" — ảnh sai phá hỏng đúng cái đó, nên nó còn tệ hơn không ảnh.
-   Chỗ chưa có ảnh chụp thật giờ là một ô chữ, kèm lời mời tự thêm ảnh
-   (app đã có sẵn luồng tải ảnh lên Drive).
+   Bỏ hẳn ảnh đi thì lưới thẻ trống trải. Nên giải pháp là PHÂN BIỆT ba
+   trạng thái thay vì chọn một:
 
-   Muốn quay lại dùng ảnh stock: đổi hằng số dưới đây thành true.
+     'real'  Ảnh bạn tự chụp (tải lên Drive) hoặc tự dán link.
+             → Hiện nguyên bản, không phủ màu, không nhãn. Đây là thứ
+               tốt nhất, nên nó phải trông khác hẳn hai loại kia.
+
+     'stock' Ảnh minh hoạ của bộ dữ liệu dựng sẵn.
+             → Hiện nguyên màu, kèm nhãn "Ảnh minh hoạ" để không ai
+               tưởng đó là ảnh chụp tại quán. Ảnh được CHIA LẠI đều
+               trong kho (xem assignedStockPhoto) nên tấm lặp nhiều
+               nhất chỉ còn ~3 lần thay vì 7.
+
+     'none'  Chưa có gì.
+             → Ô chữ: biểu tượng danh mục trên nền màu riêng của quán.
+
+   Đã thử và bỏ: phủ một lớp màu theo id quán để hai quán dùng chung một
+   tấm ảnh trông khác nhau. Nó có tác dụng, nhưng làm phở hoá hồng và cà
+   phê hoá xanh lá — với một cẩm nang ẩm thực thì đó là đánh đổi sai, vì
+   ảnh món ăn sống được là nhờ đúng màu. Chia lại ảnh cho đều giải quyết
+   được cùng vấn đề mà không đụng tới màu.
+
+   Muốn tắt hẳn ảnh minh hoạ (chỉ hiện ảnh thật): SHOW_STOCK_PHOTOS = false.
    =================================================================== */
-const USE_SEED_STOCK_PHOTOS = false;
+const SHOW_STOCK_PHOTOS = true;
 
 /** Ảnh stock của bộ dữ liệu dựng sẵn — khác với ảnh người dùng tự dán link */
 function isStockPhoto(url) {
   return typeof url === "string" && url.indexOf("images.unsplash.com") !== -1;
 }
 
-/** Quán này đã có ảnh đáng hiện chưa? */
-function hasRealPhoto(place) {
+/** 'real' | 'stock' | 'none' */
+function photoKind(place) {
   const url = place && place.image;
-  if (!url) return false;
-  if (isStockPhoto(url)) return USE_SEED_STOCK_PHOTOS;
-  return true;
+  if (!url) return "none";
+  if (!isStockPhoto(url)) return "real";
+  return SHOW_STOCK_PHOTOS ? "stock" : "none";
+}
+
+/** Ảnh do chính bạn thêm vào — dùng để biết có nên mời chụp ảnh thật không */
+function hasRealPhoto(place) {
+  return photoKind(place) === "real";
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   CHIA LẠI ẢNH MINH HOẠ CHO ĐỀU
+
+   Trong bộ dữ liệu dựng sẵn, 54 quán cà phê chỉ dùng 19 tấm ảnh, mà
+   lại chia rất lệch: có tấm dùng 7 lần, có tấm 1 lần. Cuộn lưới thẻ là
+   gặp đi gặp lại cùng một biển hiệu "CAFE".
+
+   Chia đều lại thì tấm lặp nhiều nhất còn ~3 lần, và vì chia theo thứ
+   tự nên hai quán cạnh nhau không bao giờ trùng ảnh — chỗ mà mắt dễ
+   bắt được sự lặp nhất.
+
+   Kho ảnh gom THEO DANH MỤC, để ảnh cà phê không nhảy sang quán phở.
+   Danh mục nào không có ảnh nào thì mượn kho chung.
+   ─────────────────────────────────────────────────────────────────── */
+let stockPhotoMap = null;
+let stockPhotoMapKey = "";
+
+function rebuildStockPhotoMap() {
+  const poolByCat = {};
+  const poolAll = [];
+
+  // Kho lấy từ chính những ảnh đang có trong dữ liệu — không bịa link mới,
+  // nên mọi ảnh trong kho đều chắc chắn tải được.
+  state.places.forEach(p => {
+    if (!isStockPhoto(p.image)) return;
+    const cat = p.category || "";
+    if (!poolByCat[cat]) poolByCat[cat] = [];
+    if (poolByCat[cat].indexOf(p.image) === -1) poolByCat[cat].push(p.image);
+    if (poolAll.indexOf(p.image) === -1) poolAll.push(p.image);
+  });
+
+  const map = new Map();
+  const seenPerCat = {};
+
+  state.places.forEach(p => {
+    if (!isStockPhoto(p.image)) return;
+    const cat = p.category || "";
+    const pool = (poolByCat[cat] && poolByCat[cat].length) ? poolByCat[cat] : poolAll;
+    if (!pool.length) return;
+    seenPerCat[cat] = (seenPerCat[cat] || 0);
+    map.set(p.id, pool[seenPerCat[cat] % pool.length]);
+    seenPerCat[cat]++;
+  });
+
+  stockPhotoMap = map;
+}
+
+/**
+ * Ảnh minh hoạ đã chia lại của một quán.
+ *
+ * Kết quả phụ thuộc vào thứ tự quán trong danh sách, nên phải dựng lại khi
+ * danh sách đổi — nhưng chỉ khi đổi thật, nếu không thì mỗi lần lọc lại là
+ * ảnh nhảy loạn dưới tay người đang xem.
+ */
+function assignedStockPhoto(place) {
+  const key = state.places.length + "|" + state.places.map(p => p.id).join(",");
+  if (stockPhotoMap === null || key !== stockPhotoMapKey) {
+    stockPhotoMapKey = key;
+    rebuildStockPhotoMap();
+  }
+  return stockPhotoMap.get(place.id) || place.image;
+}
+
+/**
+ * Khối ảnh của một quán, dùng chung cho thẻ và modal chi tiết.
+ * `size` là bề ngang ảnh cần tải (600 cho thẻ, 1200 cho modal).
+ */
+function placePhotoHtml(place, size, extraClass = "") {
+  const kind = photoKind(place);
+
+  if (kind === "none") {
+    return photoSlotHtml(place, extraClass);
+  }
+
+  if (kind === "real") {
+    return `<img src="${escapeHtml(photoSrc(place.image, size))}"
+                 alt="${escapeHtml(place.name)}"
+                 class="place-img"
+                 loading="lazy">`;
+  }
+
+  // Ảnh minh hoạ: lấy tấm đã chia lại cho đều, không phải tấm ghi trong dữ liệu
+  const src = photoSrc(assignedStockPhoto(place), size);
+  return `
+    <div class="place-photo-stock ${extraClass}">
+      <img src="${escapeHtml(src)}" alt="" class="place-img" loading="lazy">
+      <span class="stock-photo-flag">Ảnh minh hoạ</span>
+    </div>
+  `;
 }
 
 /**
@@ -3565,6 +3809,7 @@ function fillAddFormFromScan(found) {
   setValue("newPlaceMustTry", found.mustTry);
   setValue("newPlaceReview", found.review);
   setValue("newPlaceTags", Array.isArray(found.tags) ? found.tags.join(", ") : "");
+  setVibeValue("newPlaceVibe", found.vibe);
 
   const categorySelect = document.getElementById("newPlaceCategory");
   if (categorySelect) {
@@ -3642,6 +3887,7 @@ function handleAddPlaceSubmit(e) {
     mustTry: readValue("newPlaceMustTry"),
     review: readValue("newPlaceReview"),
     tags: tagsStr ? tagsStr.split(",").map(t => t.trim()).filter(Boolean) : [],
+    vibe: readVibeValue("newPlaceVibe"),
     image: readValue("newPlaceImage"),
     lat: readNumber("newPlaceLat"),
     lng: readNumber("newPlaceLng"),
@@ -3684,10 +3930,11 @@ function exportGoogleSheetsCSV() {
     "Lượt Đánh Giá",
     "Khoảng Giá",
     "Giờ Mở Cửa",
-    "Món Must-Try",
+    "Món Nên Gọi",
     "Đánh Giá / Review",
     "Link Google Maps",
     "Tags",
+    "Mục Đích",
     "Trạng Thái Xác Minh",
     "Nguồn Dữ Liệu"
   ];
@@ -3711,6 +3958,7 @@ function exportGoogleSheetsCSV() {
       (p.review || "").replace(/"/g, '""'),
       p.mapsUrl || "",
       (p.tags || []).join(";"),
+      (p.vibe || []).join(";"),
       p.verified ? "Đã xác minh" : "Chưa xác minh",
       DATA_SOURCE_LABELS[p.dataSource] || p.dataSource || ""
     ];
@@ -3849,7 +4097,7 @@ function renderManagerTable() {
 /**
  * Mở Modal Chỉnh Sửa Quán (Edit Place)
  */
-function openEditPlaceModal(placeId) {
+function openEditPlaceModal(placeId, options = {}) {
   const place = state.places.find(p => p.id === placeId);
   if (!place || !elements.editPlaceModal) return;
 
@@ -3876,12 +4124,27 @@ function openEditPlaceModal(placeId) {
   document.getElementById("editPlaceMustTry").value = place.mustTry || "";
   document.getElementById("editPlaceReview").value = place.review || "";
   document.getElementById("editPlaceTags").value = (place.tags || []).join(", ");
+  setVibeValue("editPlaceVibe", place.vibe);
+  refreshVibeSuggestions();
   resetPhotoField("editPlace", place.image);
 
   const verifiedBox = document.getElementById("editPlaceVerified");
   if (verifiedBox) verifiedBox.checked = place.verified === true;
 
   elements.editPlaceModal.classList.add("active");
+
+  // Vào thẳng ô ảnh khi người dùng tới đây từ nút "Thêm ảnh thật" ở chi tiết
+  if (options.focus === "photo") {
+    const photoField = document.querySelector("#editPlaceModal .photo-field");
+    const photoBtn = document.getElementById("editPlacePhotoBtn");
+    if (photoField) {
+      // Chờ modal trượt xong rồi mới cuộn, không thì cuộn vào khung chưa có chỗ
+      setTimeout(() => {
+        photoField.scrollIntoView({ block: "center", behavior: "smooth" });
+        if (photoBtn) photoBtn.focus();
+      }, 320);
+    }
+  }
 }
 
 /**
@@ -3926,6 +4189,7 @@ function handleEditPlaceSubmit(e) {
     mustTry,
     review,
     tags: tagsStr ? tagsStr.split(",").map(t => t.trim()).filter(Boolean) : [],
+    vibe: readVibeValue("editPlaceVibe"),
     image: image || state.places[index].image,
     verified
   });
